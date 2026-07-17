@@ -17,6 +17,11 @@ private:
     float fillColArr[4];
     float thickness;
 
+    int subdivisions;
+    int lastSubdivisions;
+    float radius;
+    float lastRadius;
+
 public:
     WorldBuilder();
 

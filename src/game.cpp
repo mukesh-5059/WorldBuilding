@@ -1,10 +1,9 @@
 #include "includes/WorldBuilder.hpp"
-#include "includes/TestShape.hpp"
+#include "includes/WorldGenerator.hpp"
 #include "imgui/imgui.h"
 #include "raylib/raylib.h"
 
 WorldBuilder::WorldBuilder() : Application(1280, 720, "WorldBuilder") {}
-
 
 void WorldBuilder::Init() {
     customCamera = new CustomCamera(Vector3{ 0.0f, 2.0f, 5.0f });
@@ -18,23 +17,30 @@ void WorldBuilder::Init() {
     fillColArr[0] = 0.1f; fillColArr[1] = 0.15f; fillColArr[2] = 0.25f; fillColArr[3] = 0.6f;
     thickness = 1.5f;
 
-    testModel = LoadModelFromMesh(CreateTestPyramid());
+    subdivisions = 3;
+    lastSubdivisions = 3;
+    radius = 1.5f;
+    lastRadius = 1.5f;
+
+    testModel = LoadModelFromMesh(CreateIcosphere(subdivisions, radius));
     testModel.materials[0].shader = wireframeShader;
 }
 
-
-
-
 void WorldBuilder::Update(float deltaTime) {
     customCamera->Update(deltaTime);
+
+    if (subdivisions != lastSubdivisions || radius != lastRadius) {
+        UnloadModel(testModel);
+        testModel = LoadModelFromMesh(CreateIcosphere(subdivisions, radius));
+        testModel.materials[0].shader = wireframeShader;
+        lastSubdivisions = subdivisions;
+        lastRadius = radius;
+    }
 
     SetShaderValue(wireframeShader, lineColorLoc, lineColArr, SHADER_UNIFORM_VEC4);
     SetShaderValue(wireframeShader, fillColorLoc, fillColArr, SHADER_UNIFORM_VEC4);
     SetShaderValue(wireframeShader, thicknessLoc, &thickness, SHADER_UNIFORM_FLOAT);
 }
-
-
-
 
 void WorldBuilder::Draw() {
     BeginMode3D(customCamera->camera);
@@ -46,9 +52,6 @@ void WorldBuilder::Draw() {
     EndMode3D();
 }
 
-
-
-
 void WorldBuilder::DrawUI() {
     float screenWidth = (float)GetScreenWidth();
     float screenHeight = (float)GetScreenHeight();
@@ -56,6 +59,10 @@ void WorldBuilder::DrawUI() {
     ImGui::SetNextWindowSizeConstraints(ImVec2(150.0f, screenHeight - 30), ImVec2(screenWidth * 0.8f, screenHeight - 30));
     ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
 
+    if (ImGui::CollapsingHeader("World Settings")) {
+        ImGui::SliderInt("Subdivisions", &subdivisions, 0, 10);
+        ImGui::SliderFloat("Radius", &radius, 0.5f, 50.0f, "%.2f");
+    }
     if (ImGui::CollapsingHeader("Wireframe Settings")) {
         ImGui::SliderFloat("Line Thickness", &thickness, 0.5f, 10.0f, "%.1f px");
         ImGui::ColorEdit4("Line Color", lineColArr);
@@ -64,9 +71,6 @@ void WorldBuilder::DrawUI() {
     if (ImGui::CollapsingHeader("Camera Settings")) customCamera->Gui();
     ImGui::End();
 }
-
-
-
 
 void WorldBuilder::Shutdown() {
     UnloadModel(testModel);
