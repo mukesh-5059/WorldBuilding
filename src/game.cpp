@@ -1,9 +1,14 @@
-#include "includes/WorldBuilder.hpp"
+#include "includes/game.hpp"
 #include "includes/WorldGenerator.hpp"
 #include "imgui/imgui.h"
 #include "raylib/raylib.h"
 
-WorldBuilder::WorldBuilder() : Application(1280, 720, "WorldBuilder") {}
+WorldBuilder::WorldBuilder() 
+    : Application(1280, 720, "WorldBuilder"), 
+      exportRunning(false), 
+      exportProgress(0.0f), 
+      exportWidth(1024), 
+      exportHeight(512) {}
 
 void WorldBuilder::Init() {
     customCamera = new CustomCamera(Vector3{ 0.0f, 2.0f, 5.0f });
@@ -13,28 +18,30 @@ void WorldBuilder::Init() {
     fillColorLoc = GetShaderLocation(wireframeShader, "fillColor");
     thicknessLoc = GetShaderLocation(wireframeShader, "thickness");
 
-    lineColArr[0] = 0.0f; lineColArr[1] = 1.0f; lineColArr[2] = 0.8f; lineColArr[3] = 1.0f;
-    fillColArr[0] = 0.1f; fillColArr[1] = 0.15f; fillColArr[2] = 0.25f; fillColArr[3] = 0.6f;
-    thickness = 1.5f;
+    lineColArr[0] = 0.0f; lineColArr[1] = 0.0f; lineColArr[2] = 0.0f; lineColArr[3] = 1.0f;
+    fillColArr[0] = 1.0f; fillColArr[1] = 1.0f; fillColArr[2] = 1.0f; fillColArr[3] = 0.6f;
+    thickness = 0.5f;
 
     subdivisions = 3;
     lastSubdivisions = 3;
     radius = 1.5f;
     lastRadius = 1.5f;
+    numPlates = 8;
+    lastNumPlates = 8;
 
-    testModel = LoadModelFromMesh(CreateIcosphere(subdivisions, radius));
-    testModel.materials[0].shader = wireframeShader;
+    world = GenerateWorld(subdivisions, radius, numPlates);
+    RebuildWorldModel(world, wireframeShader);
 }
 
 void WorldBuilder::Update(float deltaTime) {
     customCamera->Update(deltaTime);
 
-    if (subdivisions != lastSubdivisions || radius != lastRadius) {
-        UnloadModel(testModel);
-        testModel = LoadModelFromMesh(CreateIcosphere(subdivisions, radius));
-        testModel.materials[0].shader = wireframeShader;
+    if (subdivisions != lastSubdivisions || radius != lastRadius || numPlates != lastNumPlates) {
+        world = GenerateWorld(subdivisions, radius, numPlates);
+        RebuildWorldModel(world, wireframeShader);
         lastSubdivisions = subdivisions;
         lastRadius = radius;
+        lastNumPlates = numPlates;
     }
 
     SetShaderValue(wireframeShader, lineColorLoc, lineColArr, SHADER_UNIFORM_VEC4);
@@ -48,7 +55,9 @@ void WorldBuilder::Draw() {
         DrawLine3D(Vector3{-5, 0, 0}, Vector3{5, 0, 0}, RED);
         DrawLine3D(Vector3{0, -5, 0}, Vector3{0, 5, 0}, GREEN);
         DrawLine3D(Vector3{0, 0, -5}, Vector3{0, 0, 5}, BLUE);
-        DrawModel(testModel, Vector3{ 0.0f, 0.0f, 0.0f }, 1.0f, WHITE);
+        if (world.generated) {
+            DrawModel(world.model, Vector3{ 0.0f, 0.0f, 0.0f }, 1.0f, WHITE);
+        }
     EndMode3D();
 }
 
@@ -61,7 +70,27 @@ void WorldBuilder::DrawUI() {
 
     if (ImGui::CollapsingHeader("World Settings")) {
         ImGui::SliderInt("Subdivisions", &subdivisions, 0, 10);
-        ImGui::SliderFloat("Radius", &radius, 0.5f, 50.0f, "%.2f");
+        ImGui::SliderFloat("Radius", &radius, 0.5f, 5.0f, "%.2f");
+        ImGui::SliderInt("PlatesCount", &numPlates, 1, 30);
+        if (ImGui::Button("Regenerate Plates")) {
+            lastNumPlates = -1;
+        }
+
+        ImGui::Separator();
+
+        bool isExporting = exportRunning.load();
+        ImGui::BeginDisabled(isExporting);
+        ImGui::SliderInt("Export Width", &exportWidth, 256, 2048, "%d px");
+        exportHeight = exportWidth / 2;
+        ImGui::Text("Export Resolution: %d x %d", exportWidth, exportHeight);
+        if (ImGui::Button("Export Plate Map")) {
+            ExportWorldMapAsync(world.tiles, world.plateColors, "generated/tectonic_plates.png", exportWidth, exportHeight, exportProgress, exportRunning);
+        }
+        ImGui::EndDisabled();
+
+        if (isExporting) {
+            ImGui::ProgressBar(exportProgress.load(), ImVec2(-1, 0), "Exporting...");
+        }
     }
     if (ImGui::CollapsingHeader("Wireframe Settings")) {
         ImGui::SliderFloat("Line Thickness", &thickness, 0.5f, 10.0f, "%.1f px");
@@ -73,7 +102,7 @@ void WorldBuilder::DrawUI() {
 }
 
 void WorldBuilder::Shutdown() {
-    UnloadModel(testModel);
+    UnloadWorld(world);
     UnloadShader(wireframeShader);
     delete customCamera;
 }

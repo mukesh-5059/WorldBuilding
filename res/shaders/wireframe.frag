@@ -20,7 +20,8 @@ void main()
 
     float edgeFactor = min(min(a3.x, a3.y), a3.z);
 
-    finalColor = mix(lineColor, fillColor, edgeFactor);
+    vec4 fill = fragColor * fillColor;
+    finalColor = mix(lineColor, fill, edgeFactor);
     
     if (finalColor.a < 0.01) {
         discard;
