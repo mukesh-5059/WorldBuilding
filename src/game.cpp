@@ -4,11 +4,8 @@
 #include "raylib/raylib.h"
 
 WorldBuilder::WorldBuilder() 
-    : Application(1280, 720, "WorldBuilder"), 
-      exportRunning(false), 
-      exportProgress(0.0f), 
-      exportWidth(1024), 
-      exportHeight(512) {}
+    : Application(1280, 720, "WorldBuilder"),
+      modelGenerated(false) {}
 
 void WorldBuilder::Init() {
     customCamera = new CustomCamera(Vector3{ 0.0f, 2.0f, 5.0f });
@@ -26,22 +23,27 @@ void WorldBuilder::Init() {
     lastSubdivisions = 3;
     radius = 1.5f;
     lastRadius = 1.5f;
-    numPlates = 8;
-    lastNumPlates = 8;
 
-    world = GenerateWorld(subdivisions, radius, numPlates);
-    RebuildWorldModel(world, wireframeShader);
+    icosphereMesh = GenerateIcosphereMesh(subdivisions, radius);
+    icosphereModel = LoadModelFromMesh(icosphereMesh);
+    icosphereModel.materials[0].shader = wireframeShader;
+    modelGenerated = true;
 }
 
 void WorldBuilder::Update(float deltaTime) {
     customCamera->Update(deltaTime);
 
-    if (subdivisions != lastSubdivisions || radius != lastRadius || numPlates != lastNumPlates) {
-        world = GenerateWorld(subdivisions, radius, numPlates);
-        RebuildWorldModel(world, wireframeShader);
+    if (subdivisions != lastSubdivisions || radius != lastRadius) {
+        if (modelGenerated) {
+            UnloadModel(icosphereModel);
+        }
+        icosphereMesh = GenerateIcosphereMesh(subdivisions, radius);
+        icosphereModel = LoadModelFromMesh(icosphereMesh);
+        icosphereModel.materials[0].shader = wireframeShader;
+        modelGenerated = true;
+
         lastSubdivisions = subdivisions;
         lastRadius = radius;
-        lastNumPlates = numPlates;
     }
 
     SetShaderValue(wireframeShader, lineColorLoc, lineColArr, SHADER_UNIFORM_VEC4);
@@ -55,8 +57,9 @@ void WorldBuilder::Draw() {
         DrawLine3D(Vector3{-5, 0, 0}, Vector3{5, 0, 0}, RED);
         DrawLine3D(Vector3{0, -5, 0}, Vector3{0, 5, 0}, GREEN);
         DrawLine3D(Vector3{0, 0, -5}, Vector3{0, 0, 5}, BLUE);
-        if (world.generated) {
-            DrawModel(world.model, Vector3{ 0.0f, 0.0f, 0.0f }, 1.0f, WHITE);
+
+        if (modelGenerated) {
+            DrawModel(icosphereModel, Vector3{ 0.0f, 0.0f, 0.0f }, 1.0f, WHITE);
         }
     EndMode3D();
 }
@@ -68,29 +71,9 @@ void WorldBuilder::DrawUI() {
     ImGui::SetNextWindowSizeConstraints(ImVec2(150.0f, screenHeight - 30), ImVec2(screenWidth * 0.8f, screenHeight - 30));
     ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
 
-    if (ImGui::CollapsingHeader("World Settings")) {
-        ImGui::SliderInt("Subdivisions", &subdivisions, 0, 10);
+    if (ImGui::CollapsingHeader("Icosphere Settings")) {
+        ImGui::SliderInt("Subdivisions", &subdivisions, 0, 6);
         ImGui::SliderFloat("Radius", &radius, 0.5f, 5.0f, "%.2f");
-        ImGui::SliderInt("PlatesCount", &numPlates, 1, 30);
-        if (ImGui::Button("Regenerate Plates")) {
-            lastNumPlates = -1;
-        }
-
-        ImGui::Separator();
-
-        bool isExporting = exportRunning.load();
-        ImGui::BeginDisabled(isExporting);
-        ImGui::SliderInt("Export Width", &exportWidth, 256, 2048, "%d px");
-        exportHeight = exportWidth / 2;
-        ImGui::Text("Export Resolution: %d x %d", exportWidth, exportHeight);
-        if (ImGui::Button("Export Plate Map")) {
-            ExportWorldMapAsync(world.tiles, world.plateColors, "generated/tectonic_plates.png", exportWidth, exportHeight, exportProgress, exportRunning);
-        }
-        ImGui::EndDisabled();
-
-        if (isExporting) {
-            ImGui::ProgressBar(exportProgress.load(), ImVec2(-1, 0), "Exporting...");
-        }
     }
     if (ImGui::CollapsingHeader("Wireframe Settings")) {
         ImGui::SliderFloat("Line Thickness", &thickness, 0.5f, 10.0f, "%.1f px");
@@ -102,7 +85,9 @@ void WorldBuilder::DrawUI() {
 }
 
 void WorldBuilder::Shutdown() {
-    UnloadWorld(world);
+    if (modelGenerated) {
+        UnloadModel(icosphereModel);
+    }
     UnloadShader(wireframeShader);
     delete customCamera;
 }
