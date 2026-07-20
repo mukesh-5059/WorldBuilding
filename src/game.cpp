@@ -72,8 +72,8 @@ void WorldBuilder::DrawUI() {
     ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
 
     if (ImGui::CollapsingHeader("Icosphere Settings")) {
-        ImGui::SliderInt("Subdivisions", &subdivisions, 0, 6);
-        ImGui::SliderFloat("Radius", &radius, 0.5f, 5.0f, "%.2f");
+        ImGui::SliderInt("Subdivisions", &subdivisions, 0, 9);
+        ImGui::SliderFloat("Radius", &radius, 0.5f, 15.0f, "%.2f");
     }
     if (ImGui::CollapsingHeader("Wireframe Settings")) {
         ImGui::SliderFloat("Line Thickness", &thickness, 0.5f, 10.0f, "%.1f px");
