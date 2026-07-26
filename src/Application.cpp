@@ -39,6 +39,7 @@ void Application::Run() {
     ConsoleLog::Get().AddLog(LogLevel::Info, "WorldBuilder Editor Console initialized.");
 
     sceneRenderTexture = LoadRenderTexture(width, height);
+    SetTextureFilter(sceneRenderTexture.texture, TEXTURE_FILTER_BILINEAR);
 
     Init();
     m_targetFps = 60;
@@ -86,4 +87,18 @@ void Application::Run() {
     Shutdown();
     rlImGuiShutdown();
     CloseWindow();
+}
+
+
+void Application::SetRenderResolution(int newWidth, int newHeight) {
+    if (newWidth < 256) newWidth = 256;
+    if (newHeight < 144) newHeight = 144;
+
+    if (sceneRenderTexture.texture.width != newWidth || sceneRenderTexture.texture.height != newHeight) {
+        UnloadRenderTexture(sceneRenderTexture);
+        sceneRenderTexture = LoadRenderTexture(newWidth, newHeight);
+        SetTextureFilter(sceneRenderTexture.texture, TEXTURE_FILTER_BILINEAR);
+        width = newWidth;
+        height = newHeight;
+    }
 }

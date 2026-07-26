@@ -13,6 +13,7 @@ void Application::AddTextureViewport(const std::string& initialPath) {
         if (FileExists(vp.filePath)) {
             vp.texture = LoadTexture(vp.filePath);
             if (vp.texture.id > 0 && vp.texture.width > 0) {
+                SetTextureFilter(vp.texture, TEXTURE_FILTER_BILINEAR);
                 vp.isLoaded = true;
                 vp.loadedPath = vp.filePath;
             }
@@ -42,6 +43,23 @@ void Application::performanceGui(){
     ImGui::Separator();
     ImGui::PlotHistogram("Frame Times", m_frameTimeHistory, 100, m_frameTimeIndex, nullptr, 0.0f, 33.3f, ImVec2(0, 80));
     ImGui::End();
+}
+
+void Application::renderResolutionGui() {
+    if (ImGui::CollapsingHeader("3D Render Resolution", ImGuiTreeNodeFlags_DefaultOpen)) {
+        int curW = sceneRenderTexture.texture.width;
+        int curH = sceneRenderTexture.texture.height;
+
+        bool changed = false;
+        if (ImGui::SliderInt("Render Width", &curW, 512, 3840, "%d px")) changed = true;
+        if (ImGui::SliderInt("Render Height", &curH, 288, 2160, "%d px")) changed = true;
+
+        if (changed) {
+            SetRenderResolution(curW, curH);
+        }
+
+        ImGui::TextDisabled("Framebuffer: %d x %d px", sceneRenderTexture.texture.width, sceneRenderTexture.texture.height);
+    }
 }
 
 void Application::editorGui() {
@@ -120,6 +138,7 @@ void Application::editorGui() {
                                 if (FileExists(vp.filePath)) {
                                     vp.texture = LoadTexture(vp.filePath);
                                     if (vp.texture.id > 0 && vp.texture.width > 0) {
+                                        SetTextureFilter(vp.texture, TEXTURE_FILTER_BILINEAR);
                                         vp.isLoaded = true;
                                         vp.loadedPath = vp.filePath;
                                     }
@@ -249,6 +268,7 @@ void Application::editorGui() {
 
     // Right Inspector Panel
     ImGui::BeginChild("InspectorPanel", ImVec2(inspectorWidth, totalHeight), true);
+        renderResolutionGui();
         DrawUI();
     ImGui::EndChild();
 

@@ -9,7 +9,7 @@ WorldBuilder::WorldBuilder()
       uiLonResIndex(0) {}
 
 void WorldBuilder::RebuildPlotter() {
-    plotter.Rebuild(plotter.cubemapFaceRes, radius);
+    plotter.Rebuild(plotter.cubemapFaceRes, radius, plotter.texWidth, plotter.texHeight);
 
     if (modelGenerated && plotter.textureLoaded) {
         icosphereModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = plotter.texture;
@@ -74,6 +74,14 @@ void WorldBuilder::DrawUI() {
     }
 
     if (ImGui::CollapsingHeader("Tectonic Plate Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (ImGui::SliderInt("Export Width", &plotter.texWidth, 512, 4096, "%d px")) {
+            if (plotter.texWidth % 2 != 0) plotter.texWidth++;
+            plotter.texHeight = plotter.texWidth / 2;
+            RebuildPlotter();
+        }
+        ImGui::TextDisabled("Export Res: %d x %d px (2:1 aspect ratio)", plotter.texWidth, plotter.texHeight);
+        ImGui::Spacing();
+
         if (ImGui::SliderInt("Plate Count", &plotter.numPlates, 2, 40)) {
             RebuildPlotter();
         }

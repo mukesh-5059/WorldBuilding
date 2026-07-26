@@ -221,6 +221,7 @@ void Builder::Rebuild(int faceRes, float radius, int tWidth, int tHeight) {
     textureImage = GenImageColor(texWidth, texHeight, WHITE);
     RenderPointsToEquirectangularTexture();
     texture = LoadTextureFromImage(textureImage);
+    SetTextureFilter(texture, TEXTURE_FILTER_BILINEAR);
     textureLoaded = true;
 }
 

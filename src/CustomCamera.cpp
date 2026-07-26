@@ -133,12 +133,24 @@ void CustomCamera::Update(float deltaTime, bool isViewportHovered) {
 }
 
 void CustomCamera::Gui() {
-    // 1. Camera Mode Combo
-    int currentModeInt = (int)mode;
-    const char* modeNames[] = { "Free Fly (WASD)", "Orbit / Object Inspector (Origin)" };
-    if (ImGui::Combo("Camera Mode", &currentModeInt, modeNames, IM_ARRAYSIZE(modeNames))) {
-        SetMode((CameraType)currentModeInt);
+    // 1. Camera Mode Toggle Buttons (No dropdown)
+    ImGui::Text("Camera Mode:");
+    bool isOrbit = (mode == CameraType::Orbit);
+    bool isFreeFly = (mode == CameraType::FreeFly);
+
+    if (isOrbit) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.55f, 0.85f, 1.0f));
+    if (ImGui::Button("Orbit Mode", ImVec2(130.0f, 0.0f))) {
+        SetMode(CameraType::Orbit);
     }
+    if (isOrbit) ImGui::PopStyleColor();
+
+    ImGui::SameLine();
+
+    if (isFreeFly) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.55f, 0.85f, 1.0f));
+    if (ImGui::Button("Free Fly Mode", ImVec2(130.0f, 0.0f))) {
+        SetMode(CameraType::FreeFly);
+    }
+    if (isFreeFly) ImGui::PopStyleColor();
 
     ImGui::Separator();
 

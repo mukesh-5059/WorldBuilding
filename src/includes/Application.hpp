@@ -34,6 +34,8 @@ protected:
     float consoleHeight;
 
     void performanceGui();
+    void renderResolutionGui();
+    void SetRenderResolution(int newWidth, int newHeight);
     void editorGui();
     void AddTextureViewport(const std::string& initialPath = "");
     void RemoveTextureViewport(int index);
