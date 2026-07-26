@@ -1,4 +1,19 @@
 #pragma once
+#include "raylib/raylib.h"
+#include "ConsoleLog.hpp"
+#include <vector>
+#include <functional>
+#include <string>
+
+struct TextureViewport {
+    int id = 0;
+    std::string name;
+    char filePath[512] = "";
+    std::string loadedPath;
+    Texture2D texture = { 0 };
+    bool isLoaded = false;
+    bool open = true;
+};
 
 class Application {
 protected:
@@ -12,6 +27,14 @@ protected:
     int m_lastTargetFps;
     int m_frameTimeIndex;
 
+    RenderTexture2D sceneRenderTexture;
+    std::vector<TextureViewport> textureViewports;
+    int nextViewportId;
+    bool is3DViewportHovered;
+
+    float inspectorWidth;
+    float consoleHeight;
+
     void performanceGui();
 
 public:
@@ -19,11 +42,13 @@ public:
     virtual ~Application();
 
     void Run();
+    void AddTextureViewport(const std::string& initialPath = "");
+    void RemoveTextureViewport(int index);
 
 protected:
     virtual void Init() {}
     virtual void Update(float deltaTime) {}
-    virtual void Draw() {}
+    virtual void SceneDraw() {}
     virtual void DrawUI() {}
     virtual void Shutdown() {}
 };

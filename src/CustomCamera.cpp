@@ -17,30 +17,8 @@ CustomCamera::CustomCamera(Vector3 position) {
     zoomSpeed = 5.0f;
 }
 
-void CustomCamera::Update(float deltaTime) {
-    bool wantCaptureMouse = ImGui::GetIO().WantCaptureMouse;
-    bool wantCaptureKeyboard = ImGui::GetIO().WantCaptureKeyboard;
-
-    if (!wantCaptureMouse) {
-        float wheel = GetMouseWheelMove();
-        if (wheel != 0.0f) {
-            camera.fovy -= wheel * zoomSpeed;
-            if (camera.fovy < 10.0f) camera.fovy = 10.0f;
-            if (camera.fovy > 120.0f) camera.fovy = 120.0f;
-        }
-    }
-
-    if (!wantCaptureMouse) {
-        if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT) || IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-            Vector2 delta = GetMouseDelta();
-            yaw -= delta.x * sensitivity;
-            pitch -= delta.y * sensitivity;
-
-            const float maxPitch = 89.0f * (PI / 180.0f);
-            if (pitch > maxPitch) pitch = maxPitch;
-            if (pitch < -maxPitch) pitch = -maxPitch;
-        }
-    }
+void CustomCamera::Update(float deltaTime, bool isViewportHovered) {
+    bool allowInput = isViewportHovered || IsMouseButtonDown(MOUSE_BUTTON_RIGHT) || IsMouseButtonDown(MOUSE_BUTTON_LEFT);
 
     Vector3 forward;
     forward.x = sinf(yaw) * cosf(pitch);
@@ -52,7 +30,27 @@ void CustomCamera::Update(float deltaTime) {
     right.y = 0.0f;
     right.z = -sinf(yaw);
 
-    if (!wantCaptureKeyboard) {
+    if (allowInput) {
+        // Zoom
+        float wheel = GetMouseWheelMove();
+        if (wheel != 0.0f) {
+            camera.fovy -= wheel * zoomSpeed;
+            if (camera.fovy < 10.0f) camera.fovy = 10.0f;
+            if (camera.fovy > 120.0f) camera.fovy = 120.0f;
+        }
+
+        // Mouse Rotation
+        if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT) || IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+            Vector2 delta = GetMouseDelta();
+            yaw -= delta.x * sensitivity;
+            pitch -= delta.y * sensitivity;
+
+            const float maxPitch = 89.0f * (PI / 180.0f);
+            if (pitch > maxPitch) pitch = maxPitch;
+            if (pitch < -maxPitch) pitch = -maxPitch;
+        }
+
+        // Keyboard Movement (WASD + Space + Shift) - Enabled simultaneously with Mouse!
         Vector3 movement = { 0.0f, 0.0f, 0.0f };
 
         if (IsKeyDown(KEY_W)) movement = Vector3Add(movement, forward);
@@ -72,6 +70,7 @@ void CustomCamera::Update(float deltaTime) {
 
     camera.target = Vector3Add(camera.position, forward);
 }
+
 void CustomCamera::Gui(){
     ImGui::SliderFloat("Movement Speed", &moveSpeed, 1.0f, 50.0f, "%.1f");
     ImGui::SliderFloat("Look Sensitivity", &sensitivity, 0.0005f, 0.01f, "%.5f");

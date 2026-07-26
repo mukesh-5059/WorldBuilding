@@ -12,6 +12,6 @@ public:
 
     CustomCamera(Vector3 position = {0.0f, 0.0f, 5.0f});
 
-    void Update(float deltaTime);
+    void Update(float deltaTime, bool isViewportHovered = true);
     void Gui();
 };

@@ -3,15 +3,70 @@
 #include "rlimgui/rlImGui.h"
 #include "imgui/imgui.h"
 
-Application::Application(int width, int height, const char* title)
-    : width(width), height(height), title(title), running(true) {}
+#include <cstdio>
 
-Application::~Application() {}
+Application::Application(int width, int height, const char* title)
+    : width(width), height(height), title(title), running(true),
+      nextViewportId(1), is3DViewportHovered(false),
+      inspectorWidth(340.0f), consoleHeight(200.0f) {
+}
+
+Application::~Application() {
+    for (auto& vp : textureViewports) {
+        if (vp.isLoaded) {
+            UnloadTexture(vp.texture);
+            vp.isLoaded = false;
+        }
+    }
+}
+
+void Application::AddTextureViewport(const std::string& initialPath) {
+    TextureViewport vp;
+    vp.id = nextViewportId++;
+    vp.name = "Texture " + std::to_string(vp.id);
+    if (!initialPath.empty()) {
+        snprintf(vp.filePath, sizeof(vp.filePath), "%s", initialPath.c_str());
+        if (FileExists(vp.filePath)) {
+            vp.texture = LoadTexture(vp.filePath);
+            if (vp.texture.id > 0 && vp.texture.width > 0) {
+                vp.isLoaded = true;
+                vp.loadedPath = vp.filePath;
+            }
+        }
+    }
+    textureViewports.push_back(vp);
+}
+
+void Application::RemoveTextureViewport(int index) {
+    if (index >= 0 && index < (int)textureViewports.size()) {
+        if (textureViewports[index].isLoaded) {
+            UnloadTexture(textureViewports[index].texture);
+            textureViewports[index].isLoaded = false;
+        }
+        textureViewports.erase(textureViewports.begin() + index);
+    }
+}
 
 void Application::Run() {
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+    int monitor = GetCurrentMonitor();
+    int mWidth = GetMonitorWidth(monitor);
+    int mHeight = GetMonitorHeight(monitor);
+    if (mWidth > 0 && mHeight > 0) {
+        width = mWidth;
+        height = mHeight;
+    }
+
     InitWindow(width, height, title);
+    ToggleFullscreen();
+
     SetTargetFPS(60);
     rlImGuiSetup(true);
+
+    SetTraceLogCallback(RaylibTraceLogCallback);
+    ConsoleLog::Get().AddLog(LogLevel::Info, "WorldBuilder Editor Console initialized.");
+
+    sceneRenderTexture = LoadRenderTexture(width, height);
 
     Init();
     m_targetFps = 60;
@@ -32,27 +87,244 @@ void Application::Run() {
         
         Update(deltaTime);
 
+        // 1. Offscreen 3D Scene Rendering to Texture
+        BeginTextureMode(sceneRenderTexture);
+            ClearBackground(DARKGRAY);
+            SceneDraw();
+        EndTextureMode();
+
+        // 2. Pure ImGui-Driven Fullscreen Non-Scrollable Resizable Editor Layout
         BeginDrawing();
-        ClearBackground(DARKGRAY);
+            ClearBackground(BLACK);
 
-        Draw();
+            rlImGuiBegin();
 
-        rlImGuiBegin();
-        DrawUI();
-        performanceGui();
-        rlImGuiEnd();
+            // Set up Fullscreen Root Window (Strictly Non-Scrollable Container)
+            ImGuiViewport* mainViewport = ImGui::GetMainViewport();
+            ImGui::SetNextWindowPos(mainViewport->WorkPos);
+            ImGui::SetNextWindowSize(mainViewport->WorkSize);
+
+            ImGuiWindowFlags rootFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
+                                         ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                                         ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus |
+                                         ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+            ImGui::Begin("EditorRoot", nullptr, rootFlags);
+            ImGui::PopStyleVar();
+
+            float totalWidth = mainViewport->WorkSize.x;
+            float totalHeight = mainViewport->WorkSize.y;
+            float splitterThickness = 6.0f;
+
+            // Enforce resizable inspector width limits
+            if (inspectorWidth < 200.0f) inspectorWidth = 200.0f;
+            if (inspectorWidth > totalWidth - 300.0f) inspectorWidth = totalWidth - 300.0f;
+
+            float mainAreaWidth = totalWidth - inspectorWidth - splitterThickness;
+            if (mainAreaWidth < 200.0f) mainAreaWidth = 200.0f;
+
+            float currentConsoleH = ConsoleLog::Get().IsCollapsed() ? 28.0f : consoleHeight;
+            float viewportHeight = totalHeight - currentConsoleH - (ConsoleLog::Get().IsCollapsed() ? 0.0f : splitterThickness);
+            if (viewportHeight < 100.0f) viewportHeight = 100.0f;
+
+            // Left Main Area Container (Non-Scrollable Container)
+            ImGui::BeginChild("MainAreaPanel", ImVec2(mainAreaWidth, totalHeight), false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+
+                // Top Viewport Panel with Tab Bar
+                ImGui::BeginChild("ViewportPanel", ImVec2(mainAreaWidth, viewportHeight), false);
+                    if (ImGui::BeginTabBar("MainViewportTabs", ImGuiTabBarFlags_Reorderable)) {
+                        // Primary Hardcoded 3D Scene Viewport
+                        if (ImGui::BeginTabItem("3D Scene Viewport", nullptr, ImGuiTabItemFlags_NoCloseWithMiddleMouseButton)) {
+                            ImVec2 availSize = ImGui::GetContentRegionAvail();
+                            if (availSize.x > 0 && availSize.y > 0) {
+                                rlImGuiImageRenderTextureFit(&sceneRenderTexture, true);
+                                is3DViewportHovered = ImGui::IsItemHovered();
+                            } else {
+                                is3DViewportHovered = false;
+                            }
+                            ImGui::EndTabItem();
+                        } else {
+                            is3DViewportHovered = false;
+                        }
+
+                        // Dynamic Texture Viewports from Disk
+                        int removeIndex = -1;
+                        for (size_t i = 0; i < textureViewports.size(); ++i) {
+                            auto& vp = textureViewports[i];
+                            std::string tabLabel = vp.name + "###vp_" + std::to_string(vp.id);
+                            if (ImGui::BeginTabItem(tabLabel.c_str(), &vp.open)) {
+                                ImGui::Spacing();
+                                ImGui::AlignTextToFramePadding();
+                                ImGui::Text("File Path:");
+                                ImGui::SameLine();
+                                float buttonGroupWidth = 135.0f;
+                                float availableInputWidth = ImGui::GetContentRegionAvail().x - buttonGroupWidth;
+                                if (availableInputWidth < 100.0f) availableInputWidth = 100.0f;
+                                ImGui::SetNextItemWidth(availableInputWidth);
+                                ImGui::InputText(("##path_" + std::to_string(vp.id)).c_str(), vp.filePath, sizeof(vp.filePath));
+                                
+                                ImGui::SameLine();
+                                if (ImGui::Button(("Load##load_" + std::to_string(vp.id)).c_str(), ImVec2(60.0f, 0.0f))) {
+                                    if (vp.filePath[0] != '\0') {
+                                        if (vp.isLoaded) {
+                                            UnloadTexture(vp.texture);
+                                            vp.isLoaded = false;
+                                        }
+                                        if (FileExists(vp.filePath)) {
+                                            vp.texture = LoadTexture(vp.filePath);
+                                            if (vp.texture.id > 0 && vp.texture.width > 0) {
+                                                vp.isLoaded = true;
+                                                vp.loadedPath = vp.filePath;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                ImGui::SameLine();
+                                if (ImGui::Button(("Clear##clear_" + std::to_string(vp.id)).c_str(), ImVec2(60.0f, 0.0f))) {
+                                    if (vp.isLoaded) {
+                                        UnloadTexture(vp.texture);
+                                        vp.isLoaded = false;
+                                        vp.texture = { 0 };
+                                    }
+                                    vp.filePath[0] = '\0';
+                                    vp.loadedPath.clear();
+                                }
+
+                                ImGui::Separator();
+
+                                if (vp.isLoaded && vp.texture.id > 0) {
+                                    ImGui::Text("Loaded Texture: %s (%d x %d px)", vp.loadedPath.c_str(), vp.texture.width, vp.texture.height);
+                                    ImVec2 avail = ImGui::GetContentRegionAvail();
+                                    if (avail.x > 0 && avail.y > 0 && vp.texture.width > 0 && vp.texture.height > 0) {
+                                        float aspect = (float)vp.texture.width / (float)vp.texture.height;
+                                        float availAspect = avail.x / avail.y;
+                                        float w = avail.x;
+                                        float h = avail.y;
+                                        if (availAspect > aspect) {
+                                            w = avail.y * aspect;
+                                        } else {
+                                            h = avail.x / aspect;
+                                        }
+                                        float offsetX = (avail.x - w) * 0.5f;
+                                        float offsetY = (avail.y - h) * 0.5f;
+                                        if (offsetX > 0) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offsetX);
+                                        if (offsetY > 0) ImGui::SetCursorPosY(ImGui::GetCursorPosY() + offsetY);
+                                        rlImGuiImageSize(&vp.texture, (int)w, (int)h);
+                                    }
+                                } else {
+                                    ImGui::Spacing();
+                                    ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.2f, 1.0f), "No texture currently loaded.");
+                                    ImGui::Text("Enter the path to an image file on disk and click 'Load'.");
+                                    ImGui::Spacing();
+                                    if (FileExists("generated/polar_point_texture.png")) {
+                                        if (ImGui::Button("Load Default Generated Texture (generated/polar_point_texture.png)")) {
+                                            snprintf(vp.filePath, sizeof(vp.filePath), "generated/polar_point_texture.png");
+                                            if (vp.isLoaded) {
+                                                UnloadTexture(vp.texture);
+                                                vp.isLoaded = false;
+                                            }
+                                            vp.texture = LoadTexture(vp.filePath);
+                                            if (vp.texture.id > 0 && vp.texture.width > 0) {
+                                                vp.isLoaded = true;
+                                                vp.loadedPath = vp.filePath;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                ImGui::EndTabItem();
+                            }
+
+                            if (!vp.open) {
+                                removeIndex = (int)i;
+                            }
+                        }
+
+                        if (removeIndex >= 0) {
+                            RemoveTextureViewport(removeIndex);
+                        }
+
+                        // Plus '+' button tab at end of tab bar to add texture tabs easily
+                        if (ImGui::TabItemButton("+", ImGuiTabItemFlags_Trailing | ImGuiTabItemFlags_NoTooltip)) {
+                            AddTextureViewport();
+                        }
+
+                        ImGui::EndTabBar();
+                    }
+                ImGui::EndChild(); // ViewportPanel
+
+                // Horizontal Splitter Handle between Viewport and Console Log
+                if (!ConsoleLog::Get().IsCollapsed()) {
+                    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
+                    ImGui::InvisibleButton("##HResizer", ImVec2(mainAreaWidth, splitterThickness));
+                    if (ImGui::IsItemHovered() || ImGui::IsItemActive()) {
+                        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
+                    }
+                    if (ImGui::IsItemActive()) {
+                        float deltaY = ImGui::GetIO().MouseDelta.y;
+                        consoleHeight -= deltaY;
+                        if (consoleHeight < 60.0f) consoleHeight = 60.0f;
+                        if (consoleHeight > totalHeight - 120.0f) consoleHeight = totalHeight - 120.0f;
+                    }
+                    ImU32 hCol = ImGui::GetColorU32(ImGui::IsItemActive() ? ImGuiCol_SeparatorActive : (ImGui::IsItemHovered() ? ImGuiCol_SeparatorHovered : ImGuiCol_Separator));
+                    ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), hCol);
+                    ImGui::PopStyleVar();
+                }
+
+                // Bottom Resizable Console Log Panel
+                float finalConsoleH = totalHeight - viewportHeight - (ConsoleLog::Get().IsCollapsed() ? 0.0f : splitterThickness);
+                ImGui::BeginChild("ConsolePanel", ImVec2(mainAreaWidth, finalConsoleH), true);
+                    ConsoleLog::Get().Draw("Console Log");
+                ImGui::EndChild();
+
+            ImGui::EndChild(); // MainAreaPanel
+
+            ImGui::SameLine();
+
+            // Vertical Splitter Handle between Main Area and Inspector Panel
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
+            ImGui::InvisibleButton("##VResizer", ImVec2(splitterThickness, totalHeight));
+            if (ImGui::IsItemHovered() || ImGui::IsItemActive()) {
+                ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+            }
+            if (ImGui::IsItemActive()) {
+                float deltaX = ImGui::GetIO().MouseDelta.x;
+                inspectorWidth -= deltaX;
+                if (inspectorWidth < 200.0f) inspectorWidth = 200.0f;
+                if (inspectorWidth > totalWidth - 300.0f) inspectorWidth = totalWidth - 300.0f;
+            }
+            ImU32 vCol = ImGui::GetColorU32(ImGui::IsItemActive() ? ImGuiCol_SeparatorActive : (ImGui::IsItemHovered() ? ImGuiCol_SeparatorHovered : ImGuiCol_Separator));
+            ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), vCol);
+            ImGui::PopStyleVar();
+
+            ImGui::SameLine();
+
+            // Right Inspector Panel
+            ImGui::BeginChild("InspectorPanel", ImVec2(inspectorWidth, totalHeight), true);
+                DrawUI();
+            ImGui::EndChild();
+
+            ImGui::End(); // EditorRoot
+
+            // Floating Performance GUI Window
+            performanceGui();
+
+            rlImGuiEnd();
 
         EndDrawing();
     }
 
+    UnloadRenderTexture(sceneRenderTexture);
     Shutdown();
     rlImGuiShutdown();
     CloseWindow();
 }
 
 void Application::performanceGui(){
-    ImGui::SetNextWindowPos(ImVec2(980, 360), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(280, 340), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(20.0f, 40.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(280.0f, 220.0f), ImGuiCond_FirstUseEver);
 
     ImGui::Begin("Performance");
     ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);

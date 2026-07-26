@@ -1,12 +1,14 @@
 #pragma once
 #include "Application.hpp"
 #include "CustomCamera.hpp"
+#include "WorldGenerator.hpp"
 #include "raylib/raylib.h"
 
 class WorldBuilder : public Application {
 private:
     CustomCamera* customCamera;
     Shader wireframeShader;
+    Shader planetShader;
 
     int lineColorLoc;
     int fillColorLoc;
@@ -24,12 +26,18 @@ private:
     float radius;
     float lastRadius;
 
+    Builder plotter;
+    int uiLonResIndex;
+
 public:
     WorldBuilder();
 
     void Init() override;
     void Update(float deltaTime) override;
-    void Draw() override;
+    void SceneDraw() override;
     void DrawUI() override;
     void Shutdown() override;
+
+private:
+    void RebuildPlotter();
 };
