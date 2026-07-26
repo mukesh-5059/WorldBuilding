@@ -119,11 +119,6 @@ void WorldBuilder::DrawUI() {
             RebuildPlotter();
         }
     }
-    if (ImGui::CollapsingHeader("Wireframe Settings")) {
-        ImGui::SliderFloat("Line Thickness", &thickness, 0.0f, 10.0f, "%.1f px");
-        ImGui::ColorEdit4("Line Color", lineColArr);
-        ImGui::ColorEdit4("Fill Color", fillColArr);
-    }
     if (ImGui::CollapsingHeader("Camera Settings")) customCamera->Gui();
 }
 
