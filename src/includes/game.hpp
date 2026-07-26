@@ -10,14 +10,6 @@ private:
     Shader wireframeShader;
     Shader planetShader;
 
-    int lineColorLoc;
-    int fillColorLoc;
-    int thicknessLoc;
-
-    float lineColArr[4];
-    float fillColArr[4];
-    float thickness;
-
     Mesh icosphereMesh;
     Model icosphereModel;
     bool modelGenerated;

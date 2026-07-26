@@ -1,8 +1,6 @@
 #pragma once
 #include "raylib/raylib.h"
-#include "ConsoleLog.hpp"
 #include <vector>
-#include <functional>
 #include <string>
 
 struct TextureViewport {
@@ -36,19 +34,19 @@ protected:
     float consoleHeight;
 
     void performanceGui();
+    void editorGui();
+    void AddTextureViewport(const std::string& initialPath = "");
+    void RemoveTextureViewport(int index);
+
+    virtual void Init() {}
+    virtual void Update(float deltaTime) {}
+    virtual void SceneDraw() {}
+    virtual void DrawUI() {}
+    virtual void Shutdown() {}
 
 public:
     Application(int width = 1280, int height = 720, const char* title = "WorldBuilder");
     virtual ~Application();
 
     void Run();
-    void AddTextureViewport(const std::string& initialPath = "");
-    void RemoveTextureViewport(int index);
-
-protected:
-    virtual void Init() {}
-    virtual void Update(float deltaTime) {}
-    virtual void SceneDraw() {}
-    virtual void DrawUI() {}
-    virtual void Shutdown() {}
 };

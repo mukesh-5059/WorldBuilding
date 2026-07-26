@@ -22,14 +22,6 @@ void WorldBuilder::Init() {
     planetShader = LoadShader("res/shaders/planet.vert", "res/shaders/planet.frag");
     wireframeShader = LoadShader("res/shaders/wireframe.vert", "res/shaders/wireframe.frag");
 
-    lineColorLoc = GetShaderLocation(wireframeShader, "lineColor");
-    fillColorLoc = GetShaderLocation(wireframeShader, "fillColor");
-    thicknessLoc = GetShaderLocation(wireframeShader, "thickness");
-
-    lineColArr[0] = 0.0f; lineColArr[1] = 0.0f; lineColArr[2] = 0.0f; lineColArr[3] = 1.0f;
-    fillColArr[0] = 1.0f; fillColArr[1] = 1.0f; fillColArr[2] = 1.0f; fillColArr[3] = 0.4f;
-    thickness = 0.5f;
-
     subdivisions = 4;
     lastSubdivisions = 4;
     radius = 2.0f;
@@ -59,10 +51,6 @@ void WorldBuilder::Update(float deltaTime) {
         lastRadius = radius;
         RebuildPlotter();
     }
-
-    SetShaderValue(wireframeShader, lineColorLoc, lineColArr, SHADER_UNIFORM_VEC4);
-    SetShaderValue(wireframeShader, fillColorLoc, fillColArr, SHADER_UNIFORM_VEC4);
-    SetShaderValue(wireframeShader, thicknessLoc, &thickness, SHADER_UNIFORM_FLOAT);
 }
 
 void WorldBuilder::SceneDraw() {
