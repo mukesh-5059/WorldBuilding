@@ -106,17 +106,7 @@ Mesh GenerateIcosphereMesh(int subdivisions, float radius) {
     return mesh;
 }
 
-Color GenerateRandomPlateColor(PlateType type, int seed) {
-    unsigned int h = (unsigned int)10 * 1664525u + 1013904223u;
-    float hue = 0.0f;
-    float sat = 0.70f + ((float)(h & 0x3F) / 63.0f) * 0.25f;
-    float val = 0.60f + ((float)((h >> 8) & 0x3F) / 63.0f) * 0.30f;
-
-    if (type == PlateType::OCEANIC) {
-        hue = 195.0f + ((float)((h >> 16) & 0x3F) / 63.0f) * 45.0f; // Blue/Cyan (195° to 240°)
-    } else {
-        hue = 75.0f + ((float)((h >> 16) & 0x3F) / 63.0f) * 60.0f;  // Green/Land (75° to 135°)
-    }
-
-    return ColorFromHSV(hue, sat, val);
+Color GetPlateColor(PlateType type) {
+    if (type == PlateType::OCEANIC) return Color{ 35, 85, 205, 255 }; //Royal Blue 
+    else return Color{ 45, 185, 45, 255 }; //Vibrant Green
 }

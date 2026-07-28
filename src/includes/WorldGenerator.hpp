@@ -3,13 +3,15 @@
 #include <vector>
 
 struct Builder {
-    int cubemapFaceRes = 16;
+    int cubemapFaceRes = 256;
 
     // Tectonic Controls
-    int numPlates = 12;
+    int numPlates = 21;
     bool drawBoundaries = true;
     bool showIcosphereBase = true;
     bool textureLoaded = false;
+    int landToWaterRatio = 3;
+    float borderJitterStrength = 0.90f;
 
     int texWidth = 2048;
     int texHeight = 1024;

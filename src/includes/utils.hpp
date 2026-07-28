@@ -21,4 +21,4 @@ void CartesianToPolar(Vector3 pos, float& lonRad, float& latRad);
 
 void PolarToEquirectangularPixel(float lonRad, float latRad, int texWidth, int texHeight, int& px, int& py);
 
-Color GenerateRandomPlateColor(PlateType type, int seed);
+Color GetPlateColor(PlateType type);

@@ -82,7 +82,11 @@ void WorldBuilder::DrawUI() {
         ImGui::TextDisabled("Export Res: %d x %d px (2:1 aspect ratio)", plotter.texWidth, plotter.texHeight);
         ImGui::Spacing();
 
-        if (ImGui::SliderInt("Plate Count", &plotter.numPlates, 2, 40)) {
+        if (ImGui::SliderInt("Plate Count", &plotter.numPlates, 2, 140)) {
+            RebuildPlotter();
+        }
+
+        if (ImGui::SliderInt("Landmass ratio", &plotter.landToWaterRatio, 0, 10)) {
             RebuildPlotter();
         }
 

@@ -138,8 +138,8 @@ void Builder::RunTectonicPlateAssignment() {
     plates.reserve(numPlates);
 
     for (int p = 0; p < numPlates; ++p) {
-        PlateType pType = ((p % 3) == 0) ? PlateType::CONTINENTAL : PlateType::OCEANIC;
-        Color pCol = GenerateRandomPlateColor(pType, p + 101);
+        PlateType pType = (((float)p < (float)landToWaterRatio * numPlates / 10.0f)) ? PlateType::CONTINENTAL : PlateType::OCEANIC;
+        Color pCol = GetPlateColor(pType);
         plates.push_back(TectonicPlate{ p, pType, pCol });
     }
 
@@ -176,6 +176,9 @@ void Builder::RunTectonicPlateAssignment() {
         int seedCell = face * N * N + i * N + j;
         dist[seedCell] = 0.0f;
         cellPlateOwner[seedCell] = p;
+        //int seedCell = (int)(HashCell3D(Vector3{ (float)p, 1.23f, 4.56f }) * (float)(totalCells - 1));
+        //dist[seedCell] = 0.0f;
+        //cellPlateOwner[seedCell] = p;
         pq.push(PQElement{ 0.0f, seedCell, p });
     }
 
@@ -195,7 +198,7 @@ void Builder::RunTectonicPlateAssignment() {
             int nIdx = GetCubemapNeighborCellIndex(face, i, j, dir, N);
             if (nIdx >= 0 && nIdx < totalCells) {
                 Vector3 nPos = GetCell3DVector(nIdx, N);
-                float stepNoise = 0.85f + HashCell3D(nPos) * 0.70f;
+                float stepNoise = 0.85f + HashCell3D(nPos) * borderJitterStrength; //* (1 + current.plateId % 3);
                 float newDist = current.dist + stepNoise;
 
                 if (newDist < dist[nIdx]) {
