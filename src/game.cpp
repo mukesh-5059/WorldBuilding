@@ -113,6 +113,24 @@ void WorldBuilder::DrawUI() {
         }
     }
 
+    if (ImGui::CollapsingHeader("Layer 1: Tectonic Coastlines", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (ImGui::Checkbox("Display Tectonic Plate Boundaries", &plotter.drawBoundaries)) {
+            plotter.RenderPointsToEquirectangularTexture();
+        }
+
+        if (ImGui::SliderFloat("Land bias Multiplier", &plotter.landBiasMultiplier, 1.0f, 3.0f, "%.2f")) {
+            RebuildPlotter();
+        }
+
+        if (ImGui::SliderFloat("Plate Size variance", &plotter.plateSizeVariance, 0.0f, 1.0f, "%.2f")) {
+            RebuildPlotter();
+        }
+
+        if (ImGui::SliderFloat("Border Jitter", &plotter.borderJitterStrength, 0.0f, 20.0f, "%.2f")) {
+            RebuildPlotter();
+        }
+    }
+
     if (ImGui::CollapsingHeader("Icosphere Settings")) {
         ImGui::SliderInt("Subdivisions", &subdivisions, 0, 8);
         if (ImGui::SliderFloat("Radius", &radius, 0.5f, 15.0f, "%.2f")) {

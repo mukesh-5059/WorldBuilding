@@ -1,5 +1,6 @@
 #include "includes/WorldGenerator.hpp"
 #include "includes/utils.hpp"
+//#include "fastnoise/FaseNoise.h"
 #include "raylib/raymath.h"
 #include <vector>
 #include <queue>
@@ -20,25 +21,25 @@ static int GetCubemapNeighborCellIndex(int face, int i, int j, int dir, int N) {
 
     // Cross-Face Boundary Neighbor mapping across 12 cube edges
     if (face == 0) { // +X
-        if (ni < 0)  { nFace = 5; ni = N - 1; nj = j; }
-        if (ni >= N) { nFace = 4; ni = 0;     nj = j; }
+        if (ni < 0)  { nFace = 4; ni = N - 1; nj = j; }
+        if (ni >= N) { nFace = 5; ni = 0;     nj = j; }
         if (nj < 0)  { nFace = 3; ni = N - 1; nj = N - 1 - i; }
         if (nj >= N) { nFace = 2; ni = N - 1; nj = i; }
     } else if (face == 1) { // -X
-        if (ni < 0)  { nFace = 4; ni = N - 1; nj = j; }
-        if (ni >= N) { nFace = 5; ni = 0;     nj = j; }
+        if (ni < 0)  { nFace = 5; ni = N - 1; nj = j; }
+        if (ni >= N) { nFace = 4; ni = 0;     nj = j; }
         if (nj < 0)  { nFace = 3; ni = 0;     nj = i; }
         if (nj >= N) { nFace = 2; ni = 0;     nj = N - 1 - i; }
     } else if (face == 2) { // +Y
-        if (ni < 0)  { nFace = 1; ni = j;     nj = N - 1; }
-        if (ni >= N) { nFace = 0; ni = N - 1 - j; nj = N - 1; }
-        if (nj < 0)  { nFace = 4; ni = i;     nj = N - 1; }
+        if (ni < 0)  { nFace = 1; ni = N - 1 - j; nj = N - 1; }
+        if (ni >= N) { nFace = 0; ni = j;         nj = N - 1; }
+        if (nj < 0)  { nFace = 4; ni = i;         nj = N - 1; }
         if (nj >= N) { nFace = 5; ni = N - 1 - i; nj = N - 1; }
     } else if (face == 3) { // -Y
-        if (ni < 0)  { nFace = 1; ni = N - 1 - j; nj = 0; }
-        if (ni >= N) { nFace = 0; ni = j;     nj = 0; }
+        if (ni < 0)  { nFace = 1; ni = j;         nj = 0; }
+        if (ni >= N) { nFace = 0; ni = N - 1 - j; nj = 0; }
         if (nj < 0)  { nFace = 5; ni = N - 1 - i; nj = 0; }
-        if (nj >= N) { nFace = 4; ni = i;     nj = 0; }
+        if (nj >= N) { nFace = 4; ni = i;         nj = 0; }
     } else if (face == 4) { // +Z
         if (ni < 0)  { nFace = 1; ni = N - 1; nj = j; }
         if (ni >= N) { nFace = 0; ni = 0;     nj = j; }
@@ -140,10 +141,18 @@ void Builder::RunTectonicPlateAssignment() {
     for (int p = 0; p < numPlates; ++p) {
         PlateType pType = (((float)p < (float)landToWaterRatio * numPlates / 10.0f)) ? PlateType::CONTINENTAL : PlateType::OCEANIC;
         Color pCol = GetPlateColor(pType);
-        plates.push_back(TectonicPlate{ p, pType, pCol });
+
+        // Calculate random growth step weight for plate size diversity
+        float hBias = HashCell3D(Vector3{ (float)p, 9.87f, 6.54f }); // Range 0.0 to 1.0
+        float gBias = 1.0f + (hBias * 2.0f - 1.0f) * plateSizeVariance;
+        if (gBias < 0.2f) gBias = 0.2f;
+
+        plates.push_back(TectonicPlate{ p, pType, pCol, gBias });
     }
 
     cellPlateOwner.assign(totalCells, -1);
+    cellIsLand.assign(totalCells, false);
+    cellIsSeed.assign(totalCells, false);
     std::vector<float> dist(totalCells, 1e9f);
 
     std::priority_queue<PQElement, std::vector<PQElement>, std::greater<PQElement>> pq;
@@ -176,13 +185,21 @@ void Builder::RunTectonicPlateAssignment() {
         int seedCell = face * N * N + i * N + j;
         dist[seedCell] = 0.0f;
         cellPlateOwner[seedCell] = p;
-        //int seedCell = (int)(HashCell3D(Vector3{ (float)p, 1.23f, 4.56f }) * (float)(totalCells - 1));
-        //dist[seedCell] = 0.0f;
-        //cellPlateOwner[seedCell] = p;
+        cellIsSeed[seedCell] = true;
+
+        // Expand seed marker to 4 direct neighbors so red dots are clearly visible on high-res textures
+        for (int dir = 0; dir < 4; ++dir) {
+            int nIdx = GetCubemapNeighborCellIndex(face, i, j, dir, N);
+            if (nIdx >= 0 && nIdx < totalCells) {
+                cellIsSeed[nIdx] = true;
+            }
+        }
+
         pq.push(PQElement{ 0.0f, seedCell, p });
     }
 
-    // Seamless 3D Jittered Priority Propagation
+    // Seamless 3D Jittered Priority Propagation with Plate Expansion Weighting
+    maxPlateDist.assign(numPlates, 0.001f);
     while (!pq.empty()) {
         PQElement current = pq.top();
         pq.pop();
@@ -194,14 +211,18 @@ void Builder::RunTectonicPlateAssignment() {
         int i = rem / N;
         int j = rem % N;
 
+        float pBias = plates[current.plateId].growthBias;
+
         for (int dir = 0; dir < 4; ++dir) {
             int nIdx = GetCubemapNeighborCellIndex(face, i, j, dir, N);
             if (nIdx >= 0 && nIdx < totalCells) {
                 Vector3 nPos = GetCell3DVector(nIdx, N);
-                float stepNoise = 0.85f + HashCell3D(nPos) * borderJitterStrength; //* (1 + current.plateId % 3);
+                float stepNoise = (0.85f + HashCell3D(nPos) * borderJitterStrength) * pBias;
                 float newDist = current.dist + stepNoise;
 
                 if (newDist < dist[nIdx]) {
+                    if (newDist > maxPlateDist[current.plateId])
+                        maxPlateDist[current.plateId] = newDist;
                     dist[nIdx] = newDist;
                     cellPlateOwner[nIdx] = current.plateId;
                     pq.push(PQElement{ newDist, nIdx, current.plateId });
@@ -209,6 +230,21 @@ void Builder::RunTectonicPlateAssignment() {
             }
         }
     }
+
+    // Determine final Land vs Water state using Land Bias Multiplier
+    for (int c = 0; c < totalCells; ++c) {
+        int p = cellPlateOwner[c];
+        if (p >= 0 && p < numPlates) {
+            if (plates[p].type == PlateType::CONTINENTAL) {
+                float normDist = (dist[c] / maxPlateDist[p]) * landBiasMultiplier;
+                cellIsLand[c] = (normDist <= 1.0f);
+            } else {
+                cellIsLand[c] = false;
+            }
+        }
+    }
+
+    cellPlateDist = dist;
 }
 
 void Builder::Rebuild(int faceRes, float radius, int tWidth, int tHeight) {
@@ -232,19 +268,24 @@ void Builder::RenderPointsToEquirectangularTexture() {
     if (!textureImage.data || cellPlateOwner.empty()) return;
 
     Color* pixels = (Color*)textureImage.data;
-
-    // Render Equirectangular Texture Image
-    Color boundaryColor = Color{ 20, 20, 30, 255 };
+    Color boundaryColor     = Color{ 20, 20, 30, 255 };
+    Color defaultLandColor  = Color{ 46, 139, 87, 255 };   // Land Green
+    Color defaultOceanColor = Color{ 25, 75, 150, 255 };   // Deep Ocean Blue
+    Color seedColor         = Color{ 235, 30, 30, 255 };   // Red Seed Marker
 
     for (int py = 0; py < texHeight; ++py) {
         for (int px = 0; px < texWidth; ++px) {
             int cellId = GetCellIdAtPixel(px, py, texWidth, texHeight, cubemapFaceRes);
             int ownerPlate = (cellId >= 0 && cellId < (int)cellPlateOwner.size()) ? cellPlateOwner[cellId] : 0;
+            bool isLand = (cellId >= 0 && cellId < (int)cellIsLand.size()) ? cellIsLand[cellId] : false;
+            bool isSeed = (cellId >= 0 && cellId < (int)cellIsSeed.size()) ? cellIsSeed[cellId] : false;
 
-            Color pixelColor = plates[ownerPlate].color;
+            Color pixelColor = isLand ? defaultLandColor : defaultOceanColor;
 
-            // Accurate 1-pixel boundary sampling
-            if (drawBoundaries) {
+            if (isSeed) {
+                pixelColor = seedColor;
+            } else if (drawBoundaries) {
+                // Accurate 1-pixel boundary sampling for tectonic plates
                 int rightCell = GetCellIdAtPixel((px + 1) % texWidth, py, texWidth, texHeight, cubemapFaceRes);
                 int downCell  = GetCellIdAtPixel(px, (py + 1) % texHeight, texWidth, texHeight, cubemapFaceRes);
                 if (cellPlateOwner[rightCell] != ownerPlate || cellPlateOwner[downCell] != ownerPlate) {

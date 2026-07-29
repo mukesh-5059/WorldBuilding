@@ -10,6 +10,7 @@ struct TectonicPlate {
     int id;
     PlateType type;
     Color color;
+    float growthBias; // Growth step weight (lower = larger plate, higher = smaller plate)
 };
 
 // Function Declarations

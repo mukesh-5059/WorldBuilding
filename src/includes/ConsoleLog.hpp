@@ -3,7 +3,6 @@
 #include <vector>
 #include <mutex>
 #include "imgui/imgui.h"
-#include "raylib/raylib.h"
 
 enum class LogLevel {
     Info,
