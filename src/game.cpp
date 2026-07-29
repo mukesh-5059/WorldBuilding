@@ -2,6 +2,7 @@
 #include "includes/WorldGenerator.hpp"
 #include "imgui/imgui.h"
 #include "raylib/raylib.h"
+#include "raylib/raymath.h"
 
 WorldBuilder::WorldBuilder() 
     : Application(1280, 720, "WorldBuilder"),
@@ -53,6 +54,24 @@ void WorldBuilder::Update(float deltaTime) {
     }
 }
 
+void WorldBuilder::On3DViewportClicked(Vector2 mouseNormInViewport) {
+    Vector2 windowPos = { mouseNormInViewport.x * (float)GetScreenWidth(), mouseNormInViewport.y * (float)GetScreenHeight() };
+    Ray ray = GetMouseRay(windowPos, customCamera->camera);
+    RayCollision collision = GetRayCollisionSphere(ray, Vector3{ 0.0f, 0.0f, 0.0f }, radius);
+
+    if (collision.hit) {
+        Vector3 hitDir = Vector3Normalize(collision.point);
+        int cellId = GetCellIdFrom3DVector(hitDir, plotter.cubemapFaceRes);
+        if (cellId >= 0 && cellId < (int)plotter.cellPlateOwner.size()) {
+            plotter.selectedPlateId = plotter.cellPlateOwner[cellId];
+        } else {
+            plotter.selectedPlateId = -1;
+        }
+    } else {
+        plotter.selectedPlateId = -1;
+    }
+}
+
 void WorldBuilder::SceneDraw() {
     BeginMode3D(customCamera->camera);
         DrawGrid(10, 1.0f);
@@ -63,10 +82,61 @@ void WorldBuilder::SceneDraw() {
         if (plotter.showIcosphereBase && modelGenerated) {
             DrawModel(icosphereModel, Vector3{ 0.0f, 0.0f, 0.0f }, 1.0f, WHITE);
         }
+
+        // Draw 3D Overlays for Selected Plate (Euler Pole Axis & Velocity Vectors)
+        if (plotter.selectedPlateId >= 0 && plotter.selectedPlateId < (int)plotter.plates.size()) {
+            const auto& selPlate = plotter.plates[plotter.selectedPlateId];
+            Vector3 polePos = Vector3Scale(selPlate.eulerPole, radius * 1.35f);
+            Vector3 negPolePos = Vector3Scale(selPlate.eulerPole, -radius * 1.35f);
+
+            // Draw Euler Rotation Axis line (Yellow) and Pole Markers
+            DrawLine3D(negPolePos, polePos, YELLOW);
+            DrawSphere(polePos, 0.08f, YELLOW);
+            DrawSphere(negPolePos, 0.06f, DARKGRAY);
+
+            // Draw surface velocity vectors for selected plate
+            int N = plotter.cubemapFaceRes;
+            int total = (int)plotter.cellPlateOwner.size();
+            int step = (total > 50000) ? 12 : 4;
+            for (int c = 0; c < total; c += step) {
+                if (plotter.cellPlateOwner[c] == plotter.selectedPlateId) {
+                    Vector3 cellDir = GetCell3DVector(c, N);
+                    Vector3 cellPos = Vector3Scale(cellDir, radius * 1.01f);
+                    Vector3 rotVel = Vector3CrossProduct(Vector3Scale(selPlate.eulerPole, selPlate.angularSpeed), cellDir);
+                    DrawLine3D(cellPos, Vector3Add(cellPos, Vector3Scale(rotVel, 8.0f)), YELLOW);
+                }
+            }
+        }
     EndMode3D();
 }
 
 void WorldBuilder::DrawUI() {
+    if (ImGui::CollapsingHeader("Selected Plate Inspector", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (plotter.selectedPlateId >= 0 && plotter.selectedPlateId < (int)plotter.plates.size()) {
+            const auto& p = plotter.plates[plotter.selectedPlateId];
+            ImGui::Text("Plate ID: #%d", p.id);
+            ImGui::Text("Type: %s", (p.type == PlateType::CONTINENTAL) ? "CONTINENTAL (Land)" : "OCEANIC (Water)");
+            ImGui::Text("Growth Step Bias: %.2f", p.growthBias);
+            ImGui::Separator();
+            ImGui::Text("Euler Rotation Pole: (%.2f, %.2f, %.2f)", p.eulerPole.x, p.eulerPole.y, p.eulerPole.z);
+            ImGui::Text("Angular Speed: %.4f rad/frame", p.angularSpeed);
+
+            int cellCount = 0;
+            for (int owner : plotter.cellPlateOwner) {
+                if (owner == p.id) cellCount++;
+            }
+            float pct = (float)cellCount / (float)plotter.cellPlateOwner.size() * 100.0f;
+            ImGui::Text("Coverage: %d cells (%.2f%% of planet)", cellCount, pct);
+
+            ImGui::Spacing();
+            if (ImGui::Button("Deselect Plate", ImVec2(-1, 0))) {
+                plotter.selectedPlateId = -1;
+            }
+        } else {
+            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Click any plate on the 3D globe to inspect its Euler Pole, velocity vectors, and properties.");
+        }
+    }
+
     if (ImGui::CollapsingHeader("Cubemap Grid Renderer", ImGuiTreeNodeFlags_DefaultOpen)) {
         if (ImGui::SliderInt("Cubemap Face Res", &plotter.cubemapFaceRes, 4, 256)) {
             RebuildPlotter();
@@ -90,6 +160,18 @@ void WorldBuilder::DrawUI() {
             RebuildPlotter();
         }
 
+        if (ImGui::SliderFloat("Land bias Multiplier", &plotter.landBiasMultiplier, 1.0f, 3.0f, "%.2f")) {
+            RebuildPlotter();
+        }
+
+        if (ImGui::SliderFloat("Plate Size variance", &plotter.plateSizeVariance, 0.0f, 1.0f, "%.2f")) {
+            RebuildPlotter();
+        }
+
+        if (ImGui::SliderFloat("Coastline Turbulence", &plotter.borderJitterStrength, 0.0f, 1.0f, "%.2f")) {
+            RebuildPlotter();
+        }
+
         if (ImGui::Checkbox("Draw Plate Boundaries", &plotter.drawBoundaries)) {
             plotter.RenderPointsToEquirectangularTexture();
         }
@@ -110,24 +192,6 @@ void WorldBuilder::DrawUI() {
             if (plotter.ExportTextureImage("generated/polar_point_texture.png")) {
                 AddTextureViewport("generated/polar_point_texture.png");
             }
-        }
-    }
-
-    if (ImGui::CollapsingHeader("Layer 1: Tectonic Coastlines", ImGuiTreeNodeFlags_DefaultOpen)) {
-        if (ImGui::Checkbox("Display Tectonic Plate Boundaries", &plotter.drawBoundaries)) {
-            plotter.RenderPointsToEquirectangularTexture();
-        }
-
-        if (ImGui::SliderFloat("Land bias Multiplier", &plotter.landBiasMultiplier, 1.0f, 3.0f, "%.2f")) {
-            RebuildPlotter();
-        }
-
-        if (ImGui::SliderFloat("Plate Size variance", &plotter.plateSizeVariance, 0.0f, 1.0f, "%.2f")) {
-            RebuildPlotter();
-        }
-
-        if (ImGui::SliderFloat("Border Jitter", &plotter.borderJitterStrength, 0.0f, 20.0f, "%.2f")) {
-            RebuildPlotter();
         }
     }
 

@@ -17,9 +17,10 @@ struct Builder {
     int texHeight = 1024;
     float planetRadius = 2.0f;
 
-    // Layer 1: Dual-Bias Tectonic Parameters
     float landBiasMultiplier = 1.6f;   // Multiplier controlling land core radius (higher = smaller land)
     float plateSizeVariance = 0.50f;   // Variance in plate expansion speeds (0.0 to 1.0)
+
+    int selectedPlateId = -1;           // Currently selected plate ID (-1 if none)
 
     std::vector<TectonicPlate> plates;
     std::vector<int> cellPlateOwner; // Maps cell index -> Plate ID

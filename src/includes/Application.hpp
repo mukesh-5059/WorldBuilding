@@ -44,6 +44,7 @@ protected:
     virtual void Update(float deltaTime) {}
     virtual void SceneDraw() {}
     virtual void DrawUI() {}
+    virtual void On3DViewportClicked(Vector2 mouseNormInViewport) {}
     virtual void Shutdown() {}
 
 public:

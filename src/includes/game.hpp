@@ -28,6 +28,7 @@ public:
     void Update(float deltaTime) override;
     void SceneDraw() override;
     void DrawUI() override;
+    void On3DViewportClicked(Vector2 mouseNormInViewport) override;
     void Shutdown() override;
 
 private:

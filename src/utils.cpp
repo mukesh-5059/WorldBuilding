@@ -110,3 +110,56 @@ Color GetPlateColor(PlateType type) {
     if (type == PlateType::OCEANIC) return Color{ 35, 85, 205, 255 }; //Royal Blue 
     else return Color{ 45, 185, 45, 255 }; //Vibrant Green
 }
+
+float HashCell3D(Vector3 p) {
+    unsigned int x = (unsigned int)(p.x * 73856093.0f);
+    unsigned int y = (unsigned int)(p.y * 19349663.0f);
+    unsigned int z = (unsigned int)(p.z * 83492791.0f);
+    unsigned int n = x ^ (y * 31u) ^ (z * 57u);
+    n = (n << 13U) ^ n;
+    n = n * (n * n * 15731U + 789221U) + 1376312589U;
+    return ((float)(n & 0xFFFF) / 65535.0f);
+}
+
+Vector3 GetCell3DVector(int cellIndex, int N) {
+    int face = cellIndex / (N * N);
+    int rem = cellIndex % (N * N);
+    int i = rem / N;
+    int j = rem % N;
+
+    float u0 = -1.0f + ((float)i + 0.5f) * (2.0f / (float)N);
+    float v0 = -1.0f + ((float)j + 0.5f) * (2.0f / (float)N);
+
+    Vector3 cubeP = { 0.0f, 0.0f, 0.0f };
+    switch (face) {
+        case 0: cubeP = Vector3{ 1.0f,  v0, -u0 }; break;
+        case 1: cubeP = Vector3{-1.0f,  v0,  u0 }; break;
+        case 2: cubeP = Vector3{ u0,  1.0f, -v0 }; break;
+        case 3: cubeP = Vector3{ u0, -1.0f,  v0 }; break;
+        case 4: cubeP = Vector3{ u0,  v0,  1.0f }; break;
+        case 5: cubeP = Vector3{-u0,  v0, -1.0f }; break;
+    }
+
+    return Vector3Normalize(cubeP);
+}
+
+int GetCellIdFrom3DVector(Vector3 dir, int cubemapFaceRes) {
+    float ax = fabsf(dir.x), ay = fabsf(dir.y), az = fabsf(dir.z);
+    int face = 0; float uFace = 0.0f, vFace = 0.0f;
+    if (ax >= ay && ax >= az) {
+        if (dir.x > 0.0f) { face = 0; uFace = -dir.z / dir.x; vFace = dir.y / dir.x; }
+        else             { face = 1; uFace =  dir.z / -dir.x; vFace = dir.y / -dir.x; }
+    } else if (ay >= ax && ay >= az) {
+        if (dir.y > 0.0f) { face = 2; uFace =  dir.x / dir.y; vFace = -dir.z / dir.y; }
+        else             { face = 3; uFace =  dir.x / -dir.y; vFace =  dir.z / -dir.y; }
+    } else {
+        if (dir.z > 0.0f) { face = 4; uFace =  dir.x / dir.z; vFace = dir.y / dir.z; }
+        else             { face = 5; uFace = -dir.x / -dir.z; vFace = dir.y / -dir.z; }
+    }
+    int i = (int)(((uFace + 1.0f) * 0.5f) * (float)cubemapFaceRes);
+    int j = (int)(((vFace + 1.0f) * 0.5f) * (float)cubemapFaceRes);
+    if (i < 0) i = 0; if (i >= cubemapFaceRes) i = cubemapFaceRes - 1;
+    if (j < 0) j = 0; if (j >= cubemapFaceRes) j = cubemapFaceRes - 1;
+
+    return face * cubemapFaceRes * cubemapFaceRes + i * cubemapFaceRes + j;
+}

@@ -54,49 +54,6 @@ static int GetCubemapNeighborCellIndex(int face, int i, int j, int dir, int N) {
     return nFace * N * N + ni * N + nj;
 }
 
-static Vector3 GetCell3DVector(int cellIndex, int N) {
-    int face = cellIndex / (N * N);
-    int rem = cellIndex % (N * N);
-    int i = rem / N;
-    int j = rem % N;
-
-    float u0 = -1.0f + ((float)i + 0.5f) * (2.0f / (float)N);
-    float v0 = -1.0f + ((float)j + 0.5f) * (2.0f / (float)N);
-
-    Vector3 cubeP = { 0.0f, 0.0f, 0.0f };
-    switch (face) {
-        case 0: cubeP = Vector3{ 1.0f,  v0, -u0 }; break;
-        case 1: cubeP = Vector3{-1.0f,  v0,  u0 }; break;
-        case 2: cubeP = Vector3{ u0,  1.0f, -v0 }; break;
-        case 3: cubeP = Vector3{ u0, -1.0f,  v0 }; break;
-        case 4: cubeP = Vector3{ u0,  v0,  1.0f }; break;
-        case 5: cubeP = Vector3{-u0,  v0, -1.0f }; break;
-    }
-
-    return Vector3Normalize(cubeP);
-}
-
-
-static float HashCell3D(Vector3 p) {
-    unsigned int x = (unsigned int)(p.x * 73856093.0f);
-    unsigned int y = (unsigned int)(p.y * 19349663.0f);
-    unsigned int z = (unsigned int)(p.z * 83492791.0f);
-    unsigned int n = x ^ (y * 31u) ^ (z * 57u);
-    n = (n << 13U) ^ n;
-    n = n * (n * n * 15731U + 789221U) + 1376312589U;
-    return ((float)(n & 0xFFFF) / 65535.0f);
-}
-
-struct PQElement {
-    float dist;
-    int cellIndex;
-    int plateId;
-
-    bool operator>(const PQElement& other) const {
-        return dist > other.dist;
-    }
-};
-
 
 void Builder::RunTectonicPlateAssignment() {
     int N = cubemapFaceRes;
@@ -114,12 +71,18 @@ void Builder::RunTectonicPlateAssignment() {
 
 
         // Calculate random growth step weight for plate size diversity
-        float hBias = HashCell3D(Vector3{ (float)p, 9.87f, 6.54f }); // Range 0.0 to 1.0
+        float hBias = HashCell3D(Vector3{ (float)p, 9.87f, 6.54f });
         float gBias = 1.0f + (hBias * 2.0f - 1.0f) * plateSizeVariance;
         if (gBias < 0.2f) gBias = 0.2f;
 
+        // Calculate 3D Euler Rotation Pole and Angular Speed for tectonic plate kinematics
+        float eh1 = HashCell3D(Vector3{ (float)p, 5.43f, 2.10f }) * 2.0f - 1.0f;
+        float eh2 = HashCell3D(Vector3{ 1.09f, (float)p, 8.76f }) * (2.0f * PI);
+        float er = sqrtf(1.0f - eh1 * eh1);
+        Vector3 ePole = Vector3Normalize(Vector3{ er * cosf(eh2), eh1, er * sinf(eh2) });
+        float aSpeed = 0.02f + HashCell3D(Vector3{ (float)p, 3.33f, 7.77f }) * 0.06f;
 
-        plates.push_back(TectonicPlate{ p, pType, pCol, gBias });
+        plates.push_back(TectonicPlate{ p, pType, pCol, gBias, ePole, aSpeed });
     }
 
 

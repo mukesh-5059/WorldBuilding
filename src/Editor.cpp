@@ -104,6 +104,18 @@ void Application::editorGui() {
                     if (availSize.x > 0 && availSize.y > 0) {
                         rlImGuiImageRenderTextureFit(&sceneRenderTexture, true);
                         is3DViewportHovered = ImGui::IsItemHovered();
+
+                        if (is3DViewportHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+                            ImVec2 minP = ImGui::GetItemRectMin();
+                            ImVec2 sizeP = ImGui::GetItemRectSize();
+                            ImVec2 mouseP = ImGui::GetMousePos();
+
+                            if (sizeP.x > 0.0f && sizeP.y > 0.0f) {
+                                float normX = (mouseP.x - minP.x) / sizeP.x;
+                                float normY = (mouseP.y - minP.y) / sizeP.y;
+                                On3DViewportClicked(Vector2{ normX, normY });
+                            }
+                        }
                     } else {
                         is3DViewportHovered = false;
                     }
