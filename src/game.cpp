@@ -160,7 +160,7 @@ void WorldBuilder::DrawUI() {
             RebuildPlotter();
         }
 
-        if (ImGui::SliderFloat("Land bias Multiplier", &plotter.landBiasMultiplier, 1.0f, 3.0f, "%.2f")) {
+        if (ImGui::SliderFloat("Land Threshold", &plotter.landThreshold, 0.0f, 1.0f, "%.2f")) {
             RebuildPlotter();
         }
 
@@ -168,7 +168,7 @@ void WorldBuilder::DrawUI() {
             RebuildPlotter();
         }
 
-        if (ImGui::SliderFloat("Coastline Turbulence", &plotter.borderJitterStrength, 0.0f, 1.0f, "%.2f")) {
+        if (ImGui::SliderFloat("Plate border jitter", &plotter.borderJitterStrength, 0.0f, 2.0f, "%.2f")) {
             RebuildPlotter();
         }
 

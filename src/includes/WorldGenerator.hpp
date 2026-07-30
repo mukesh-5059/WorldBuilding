@@ -17,7 +17,7 @@ struct Builder {
     int texHeight = 1024;
     float planetRadius = 2.0f;
 
-    float landBiasMultiplier = 1.6f;   // Multiplier controlling land core radius (higher = smaller land)
+    float landThreshold = 0.35f;       // Threshold value for land cutoff (0.0 to 1.0)
     float plateSizeVariance = 0.50f;   // Variance in plate expansion speeds (0.0 to 1.0)
 
     int selectedPlateId = -1;           // Currently selected plate ID (-1 if none)

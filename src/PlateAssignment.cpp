@@ -1,5 +1,6 @@
 #include "includes/WorldGenerator.hpp"
 #include "includes/utils.hpp"
+#include "fastnoise/FaseNoise.h"
 #include "raylib/raymath.h"
 
 #include <cmath>
@@ -179,14 +180,29 @@ void Builder::RunTectonicPlateAssignment() {
         }
     }
 
+    // FastNoise 3D Continental Landmass Generation
+    FastNoiseLite noise;
+    noise.SetNoiseType(FastNoiseLite::NoiseType_OpenSimplex2);
+    noise.SetFractalType(FastNoiseLite::FractalType_FBm);
+    noise.SetFractalOctaves(4);
+    noise.SetFrequency(2.5f);
 
-    // Determine final Land vs Water state using Land Bias Multiplier
+    cellIsLand.assign(totalCells, false);
+
     for (int c = 0; c < totalCells; ++c) {
         int p = cellPlateOwner[c];
         if (p >= 0 && p < numPlates) {
             if (plates[p].type == PlateType::CONTINENTAL) {
-                float normDist = (dist[c] / maxPlateDist[p]) * landBiasMultiplier;
-                cellIsLand[c] = (normDist <= 1.0f);
+                Vector3 pos = GetCell3DVector(c, N);
+                // Sample 3D OpenSimplex2 noise
+                float noiseVal = noise.GetNoise(pos.x * 2.5f, pos.y * 2.5f, pos.z * 2.5f); // [-1.0, 1.0]
+
+                // Distance from plate seed normalized
+                float normDist = (maxPlateDist[p] > 0.001f) ? (dist[c] / maxPlateDist[p]) : 1.0f;
+
+                // Combine distance falloff with 3D noise for organic continent shape
+                float landValue = (1.0f - normDist) * 1.4f + (noiseVal * 0.5f);
+                cellIsLand[c] = (landValue > landThreshold);
             } else {
                 cellIsLand[c] = false;
             }
