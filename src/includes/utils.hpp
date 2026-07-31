@@ -40,3 +40,5 @@ float HashCell3D(Vector3 p);
 Vector3 GetCell3DVector(int cellIndex, int N);
 
 int GetCellIdFrom3DVector(Vector3 dir, int cubemapFaceRes);
+
+int GetCubemapNeighborCellIndex(int face, int i, int j, int dir, int N);

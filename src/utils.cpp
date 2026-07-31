@@ -163,3 +163,50 @@ int GetCellIdFrom3DVector(Vector3 dir, int cubemapFaceRes) {
 
     return face * cubemapFaceRes * cubemapFaceRes + i * cubemapFaceRes + j;
 }
+
+int GetCubemapNeighborCellIndex(int face, int i, int j, int dir, int N) {
+    int ni = i, nj = j, nFace = face;
+
+    if (dir == 0) ni = i - 1;
+    else if (dir == 1) ni = i + 1;
+    else if (dir == 2) nj = j - 1;
+    else if (dir == 3) nj = j + 1;
+
+    if (ni >= 0 && ni < N && nj >= 0 && nj < N) {
+        return nFace * N * N + ni * N + nj;
+    }
+
+    if (face == 0) {
+        if (ni < 0)  { nFace = 4; ni = N - 1; nj = j; }
+        if (ni >= N) { nFace = 5; ni = 0;     nj = j; }
+        if (nj < 0)  { nFace = 3; ni = N - 1; nj = N - 1 - i; }
+        if (nj >= N) { nFace = 2; ni = N - 1; nj = i; }
+    } else if (face == 1) {
+        if (ni < 0)  { nFace = 5; ni = N - 1; nj = j; }
+        if (ni >= N) { nFace = 4; ni = 0;     nj = j; }
+        if (nj < 0)  { nFace = 3; ni = 0;     nj = i; }
+        if (nj >= N) { nFace = 2; ni = 0;     nj = N - 1 - i; }
+    } else if (face == 2) {
+        if (ni < 0)  { nFace = 1; ni = N - 1 - j; nj = N - 1; }
+        if (ni >= N) { nFace = 0; ni = j;         nj = N - 1; }
+        if (nj < 0)  { nFace = 4; ni = i;         nj = N - 1; }
+        if (nj >= N) { nFace = 5; ni = N - 1 - i; nj = N - 1; }
+    } else if (face == 3) {
+        if (ni < 0)  { nFace = 1; ni = j;         nj = 0; }
+        if (ni >= N) { nFace = 0; ni = N - 1 - j; nj = 0; }
+        if (nj < 0)  { nFace = 5; ni = N - 1 - i; nj = 0; }
+        if (nj >= N) { nFace = 4; ni = i;         nj = 0; }
+    } else if (face == 4) {
+        if (ni < 0)  { nFace = 1; ni = N - 1; nj = j; }
+        if (ni >= N) { nFace = 0; ni = 0;     nj = j; }
+        if (nj < 0)  { nFace = 3; ni = i;     nj = N - 1; }
+        if (nj >= N) { nFace = 2; ni = i;     nj = 0; }
+    } else if (face == 5) {
+        if (ni < 0)  { nFace = 0; ni = N - 1; nj = j; }
+        if (ni >= N) { nFace = 1; ni = 0;     nj = j; }
+        if (nj < 0)  { nFace = 3; ni = N - 1 - i; nj = 0; }
+        if (nj >= N) { nFace = 2; ni = N - 1 - i; nj = N - 1; }
+    }
+
+    return nFace * N * N + ni * N + nj;
+}

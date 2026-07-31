@@ -1,8 +1,15 @@
 #include "includes/WorldGenerator.hpp"
-//#include "fastnoise/FaseNoise.h"
 #include <cmath>
 #include <vector>
 
+Builder::Builder() {
+    textureLoaded = false;
+    textureImage.data = nullptr;
+}
+
+Builder::~Builder() {
+    Unload();
+}
 
 static int GetCellIdAtPixel(int px, int py, int texWidth, int texHeight, int cubemapFaceRes) {
     float latRad = (PI * 0.5f) - ((float)py + 0.5f) * (PI / (float)texHeight);
@@ -37,7 +44,6 @@ static int GetCellIdAtPixel(int px, int py, int texWidth, int texHeight, int cub
     return face * cubemapFaceRes * cubemapFaceRes + i * cubemapFaceRes + j;
 }
 
-
 void Builder::Rebuild(int faceRes, float radius, int tWidth, int tHeight) {
     Unload();
 
@@ -47,6 +53,7 @@ void Builder::Rebuild(int faceRes, float radius, int tWidth, int tHeight) {
     texHeight = tHeight;
 
     RunTectonicPlateAssignment();
+    EvaluateTectonicBoundaryCollisions();
 
     textureImage = GenImageColor(texWidth, texHeight, WHITE);
     RenderPointsToEquirectangularTexture();
@@ -75,12 +82,44 @@ void Builder::RenderPointsToEquirectangularTexture() {
 
             if (isSeed) {
                 pixelColor = seedColor;
-            } else if (drawBoundaries) {
-                // Accurate 1-pixel boundary sampling for tectonic plates
-                int rightCell = GetCellIdAtPixel((px + 1) % texWidth, py, texWidth, texHeight, cubemapFaceRes);
-                int downCell  = GetCellIdAtPixel(px, (py + 1) % texHeight, texWidth, texHeight, cubemapFaceRes);
-                if (cellPlateOwner[rightCell] != ownerPlate || cellPlateOwner[downCell] != ownerPlate) {
-                    pixelColor = boundaryColor;
+            } else if (drawStressBoundaries || drawBoundaries) {
+                bool isBorder = false;
+                int borderCellId = cellId;
+
+                int tRadius = 2; // Standard 2px boundary thickness
+                for (int dx = -tRadius + 1; dx <= tRadius; ++dx) {
+                    for (int dy = -tRadius + 1; dy <= tRadius; ++dy) {
+                        if (dx == 0 && dy == 0) continue;
+                        int checkPx = (px + dx + texWidth) % texWidth;
+                        int checkPy = py + dy;
+                        if (checkPy < 0 || checkPy >= texHeight) continue;
+
+                        int checkCell = GetCellIdAtPixel(checkPx, checkPy, texWidth, texHeight, cubemapFaceRes);
+                        if (cellPlateOwner[checkCell] != ownerPlate) {
+                            isBorder = true;
+                            // Pick cell ID of boundary cell that has a valid boundary type
+                            borderCellId = (cellPlateOwner[checkCell] < ownerPlate) ? checkCell : cellId;
+                            break;
+                        }
+                    }
+                    if (isBorder) break;
+                }
+
+                if (isBorder) {
+                    if (drawStressBoundaries) {
+                        BoundaryType bType = (borderCellId >= 0 && borderCellId < (int)cellBoundaryType.size()) ? cellBoundaryType[borderCellId] : BoundaryType::NONE;
+                        if (bType == BoundaryType::CONVERGENT) {
+                            pixelColor = Color{ 235, 40, 40, 255 };  // Red (Colliding / Mountains)
+                        } else if (bType == BoundaryType::DIVERGENT) {
+                            pixelColor = Color{ 40, 200, 235, 255 }; // Cyan (Rifting / Ridges)
+                        } else if (bType == BoundaryType::TRANSFORM) {
+                            pixelColor = Color{ 240, 160, 40, 255 }; // Orange (Fault lines)
+                        } else {
+                            pixelColor = boundaryColor;
+                        }
+                    } else {
+                        pixelColor = boundaryColor; // Dark neutral plate boundary
+                    }
                 }
             }
 

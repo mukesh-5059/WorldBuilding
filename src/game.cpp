@@ -94,16 +94,40 @@ void WorldBuilder::SceneDraw() {
             DrawSphere(polePos, 0.08f, YELLOW);
             DrawSphere(negPolePos, 0.06f, DARKGRAY);
 
-            // Draw surface velocity vectors for selected plate
+            // Draw ONE clear 3D velocity arrow at the plate seed location
             int N = plotter.cubemapFaceRes;
-            int total = (int)plotter.cellPlateOwner.size();
-            int step = (total > 50000) ? 12 : 4;
-            for (int c = 0; c < total; c += step) {
-                if (plotter.cellPlateOwner[c] == plotter.selectedPlateId) {
-                    Vector3 cellDir = GetCell3DVector(c, N);
-                    Vector3 cellPos = Vector3Scale(cellDir, radius * 1.01f);
-                    Vector3 rotVel = Vector3CrossProduct(Vector3Scale(selPlate.eulerPole, selPlate.angularSpeed), cellDir);
-                    DrawLine3D(cellPos, Vector3Add(cellPos, Vector3Scale(rotVel, 8.0f)), YELLOW);
+            int seedCell = -1;
+            for (size_t c = 0; c < plotter.cellPlateOwner.size(); ++c) {
+                if (plotter.cellPlateOwner[c] == selPlate.id && c < plotter.cellIsSeed.size() && plotter.cellIsSeed[c]) {
+                    seedCell = (int)c;
+                    break;
+                }
+            }
+
+            if (seedCell >= 0) {
+                Vector3 seedDir = GetCell3DVector(seedCell, N);
+                Vector3 seedPos = Vector3Scale(seedDir, radius * 1.02f);
+                // Correct direction: seedDir x eulerPole (flipped cross product order)
+                Vector3 rotVel = Vector3CrossProduct(seedDir, Vector3Scale(selPlate.eulerPole, selPlate.angularSpeed));
+
+                if (Vector3Length(rotVel) > 0.0001f) {
+                    Vector3 velDir = Vector3Normalize(rotVel);
+                    float arrowLength = 0.15f + selPlate.angularSpeed * 5.0f; // Scaled by speed
+                    Vector3 arrowEnd = Vector3Add(seedPos, Vector3Scale(velDir, arrowLength));
+
+                    // Main arrow shaft
+                    DrawLine3D(seedPos, arrowEnd, YELLOW);
+
+                    // Arrowhead side wings
+                    Vector3 sideDir = Vector3Normalize(Vector3CrossProduct(seedDir, velDir));
+                    float headSize = 0.09f;
+                    Vector3 headBase = Vector3Subtract(arrowEnd, Vector3Scale(velDir, headSize));
+                    Vector3 wing1 = Vector3Add(headBase, Vector3Scale(sideDir, headSize * 0.5f));
+                    Vector3 wing2 = Vector3Subtract(headBase, Vector3Scale(sideDir, headSize * 0.5f));
+
+                    DrawLine3D(arrowEnd, wing1, YELLOW);
+                    DrawLine3D(arrowEnd, wing2, YELLOW);
+                    DrawSphere(seedPos, 0.04f, RED); // Red sphere at seed origin
                 }
             }
         }
@@ -122,11 +146,24 @@ void WorldBuilder::DrawUI() {
             ImGui::Text("Angular Speed: %.4f rad/frame", p.angularSpeed);
 
             int cellCount = 0;
-            for (int owner : plotter.cellPlateOwner) {
-                if (owner == p.id) cellCount++;
+            int convCount = 0, divCount = 0, transCount = 0;
+            for (size_t c = 0; c < plotter.cellPlateOwner.size(); ++c) {
+                if (plotter.cellPlateOwner[c] == p.id) {
+                    cellCount++;
+                    if (c < plotter.cellBoundaryType.size()) {
+                        if (plotter.cellBoundaryType[c] == BoundaryType::CONVERGENT) convCount++;
+                        else if (plotter.cellBoundaryType[c] == BoundaryType::DIVERGENT) divCount++;
+                        else if (plotter.cellBoundaryType[c] == BoundaryType::TRANSFORM) transCount++;
+                    }
+                }
             }
             float pct = (float)cellCount / (float)plotter.cellPlateOwner.size() * 100.0f;
             ImGui::Text("Coverage: %d cells (%.2f%% of planet)", cellCount, pct);
+            ImGui::Separator();
+            ImGui::Text("Boundary Dynamics:");
+            ImGui::TextColored(ImVec4(0.95f, 0.2f, 0.2f, 1.0f), "  Convergent (Red): %d cells", convCount);
+            ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.95f, 1.0f), "  Divergent (Cyan): %d cells", divCount);
+            ImGui::TextColored(ImVec4(0.95f, 0.6f, 0.2f, 1.0f), "  Transform (Orange): %d cells", transCount);
 
             ImGui::Spacing();
             if (ImGui::Button("Deselect Plate", ImVec2(-1, 0))) {
@@ -173,6 +210,10 @@ void WorldBuilder::DrawUI() {
         }
 
         if (ImGui::Checkbox("Draw Plate Boundaries", &plotter.drawBoundaries)) {
+            plotter.RenderPointsToEquirectangularTexture();
+        }
+
+        if (ImGui::Checkbox("Draw Stress Boundaries (Red/Cyan/Orange)", &plotter.drawStressBoundaries)) {
             plotter.RenderPointsToEquirectangularTexture();
         }
 
