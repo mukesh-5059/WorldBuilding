@@ -1,58 +1,416 @@
 #include "LandmassGenerator.hpp"
 #include <cmath>
 #include <algorithm>
+#include <cstdlib>
+#include <queue>
 
 LandmassGenerator::LandmassGenerator() {
-    GenerateLandmassData();
+    RunPlateAssignmentFloodFill();
+    CalculateContinentalPlateSDF();
+    DetectAllPlateBoundaries();
+    GenerateContinentalLandmassSeeds();
+    GenerateContinentalHeightmapData();
 }
 
 LandmassGenerator::~LandmassGenerator() {
 }
 
-float LandmassGenerator::EvaluateSeedFalloff(float dx, float dy, const SeedPoint& sp) {
-    float r = std::max(0.01f, sp.radius);
-    FalloffType shape = sp.shape;
+void LandmassGenerator::GenerateGridCellColors() {
+    int w = config.mapWidth;
+    int h = config.mapHeight;
+    int totalCells = w * h;
+    cellColors.resize(totalCells);
 
-    if (shape == FalloffType::Radial) {
-        float normD = sqrtf(dx * dx + dy * dy) / r;
-        return powf(std::max(0.0f, 1.0f - normD), config.falloffPower);
-    } 
-    else if (shape == FalloffType::Diamond) {
-        // 1. Rotation by per-seed angle theta
-        float rad = sp.diamondAngle * (PI / 180.0f);
-        float cosA = cosf(rad);
-        float sinA = sinf(rad);
-        float rx = dx * cosA - dy * sinA;
-        float ry = dx * sinA + dy * cosA;
+    auto HashRnd = [this](int id, int offset) {
+        int n = id * 374761393 + config.seed * 668265263 + offset * 144662241;
+        n = (n ^ (n >> 13)) * 1274126177;
+        return (float)(n & 0x7fffffff) / (float)0x7fffffff;
+    };
 
-        // 2. Per-seed Aspect Ratio stretching (elongation / scale)
-        float aspect = std::max(0.1f, sp.diamondAspect);
-        float normX = fabsf(rx) / (r * aspect);
-        float normY = fabsf(ry) / (r / aspect);
-
-        // 3. Hardcoded Pinch L_q norm exponent q = 1.19
-        float q = std::clamp(HARDCODED_DIAMOND_PINCH, 0.4f, 2.0f);
-        float normD = powf(powf(normX, q) + powf(normY, q), 1.0f / q);
-
-        return powf(std::max(0.0f, 1.0f - normD), config.falloffPower);
-    } 
-    else if (shape == FalloffType::Starfish) {
-        float angle = atan2f(dy, dx);
-        // Radius-dependent arm dampening (hardcoded dampening exponent = 2.24)
-        float normRadiusRatio = std::clamp(r / std::max(0.01f, config.seedMaxRadius), 0.1f, 1.0f);
-        float effectiveAmp = sp.starAmp * powf(normRadiusRatio, HARDCODED_STARFISH_DAMPENING);
-        float modulation = 1.0f + effectiveAmp * sinf(sp.starArms * angle);
-        float dist = sqrtf(dx * dx + dy * dy) * modulation;
-        float normD = dist / r;
-        return powf(std::max(0.0f, 1.0f - normD), config.falloffPower);
+    for (int cellId = 0; cellId < totalCells; ++cellId) {
+        unsigned char r = (unsigned char)(40 + HashRnd(cellId, 1) * 215.0f);
+        unsigned char g = (unsigned char)(40 + HashRnd(cellId, 2) * 215.0f);
+        unsigned char b = (unsigned char)(40 + HashRnd(cellId, 3) * 215.0f);
+        cellColors[cellId] = Color{ r, g, b, 255 };
     }
-
-    float normD = sqrtf(dx * dx + dy * dy) / r;
-    return powf(std::max(0.0f, 1.0f - normD), config.falloffPower);
 }
 
-std::vector<SeedPoint> LandmassGenerator::GenerateSeedPoints() {
-    std::vector<SeedPoint> points;
+Image LandmassGenerator::GenerateGridCellImage() {
+    int w = config.mapWidth;
+    int h = config.mapHeight;
+    Image img = GenImageColor(w, h, BLACK);
+
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            int cellId = y * w + x;
+            Color c = cellColors[cellId];
+            ImageDrawPixel(&img, x, y, c);
+        }
+    }
+    return img;
+}
+
+/* =========================================================================
+   Step 2: 2D Plate Assignment via Priority Queue (Dijkstra weighted growth)
+   ========================================================================= */
+
+void LandmassGenerator::RunPlateAssignmentFloodFill() {
+    int w = config.mapWidth;
+    int h = config.mapHeight;
+    int totalCells = w * h;
+
+    cellPlateOwner.assign(totalCells, -1);
+    cellPlateDist.assign(totalCells, 1e9f);
+    plateColors.clear();
+    plateTypes.clear();
+    plateSeedCells.clear();
+    plateGrowthBias.clear();
+
+    auto HashRnd = [this](int id, int offset) {
+        int n = id * 374761393 + config.seed * 668265263 + offset * 144662241;
+        n = (n ^ (n >> 13)) * 1274126177;
+        return (float)(n & 0x7fffffff) / (float)0x7fffffff;
+    };
+
+    int numP = std::clamp(config.numPlates, 2, 50);
+
+    // 1. Generate plate colors, growth step bias, and Plate Types (CONTINENTAL vs OCEANIC)
+    int continentalCount = 0;
+    for (int p = 0; p < numP; ++p) {
+        unsigned char r = (unsigned char)(50 + HashRnd(p, 10) * 205.0f);
+        unsigned char g = (unsigned char)(50 + HashRnd(p, 20) * 205.0f);
+        unsigned char b = (unsigned char)(50 + HashRnd(p, 30) * 205.0f);
+        plateColors.push_back(Color{ r, g, b, 255 });
+
+        float hBias = HashRnd(p, 40);
+        float gBias = 1.0f + (hBias * 2.0f - 1.0f) * config.plateSizeVariance;
+        gBias = std::max(0.15f, gBias);
+        plateGrowthBias.push_back(gBias);
+
+        PlateType pType = (HashRnd(p, 60) < config.landRatio) ? PlateType::CONTINENTAL : PlateType::OCEANIC;
+        plateTypes.push_back(pType);
+        if (pType == PlateType::CONTINENTAL) continentalCount++;
+    }
+
+    if (continentalCount == 0 && numP > 0) {
+        plateTypes[0] = PlateType::CONTINENTAL;
+    } else if (continentalCount == numP && numP > 1) {
+        plateTypes[numP - 1] = PlateType::OCEANIC;
+    }
+
+    // 2. Pick random seed cell locations spread across the grid and push to Priority Queue
+    std::priority_queue<PQElement, std::vector<PQElement>, std::greater<PQElement>> pq;
+
+    for (int p = 0; p < numP; ++p) {
+        int sx = (int)(HashRnd(p, 1) * (float)w);
+        int sy = (int)(HashRnd(p, 2) * (float)h);
+        sx = std::clamp(sx, 0, w - 1);
+        sy = std::clamp(sy, 0, h - 1);
+
+        int seedCell = sy * w + sx;
+        if (cellPlateOwner[seedCell] == -1) {
+            cellPlateOwner[seedCell] = p;
+            cellPlateDist[seedCell] = 0.0f;
+            plateSeedCells.push_back(seedCell);
+            pq.push(PQElement{ 0.0f, seedCell, p });
+        }
+    }
+
+    // 3. Priority Queue Dijkstra expansion across 4-neighbors from top element
+    int dx[4] = { -1, 1, 0, 0 };
+    int dy[4] = { 0, 0, -1, 1 };
+
+    while (!pq.empty()) {
+        PQElement top = pq.top();
+        pq.pop();
+
+        if (top.dist > cellPlateDist[top.cellId]) {
+            continue;
+        }
+
+        int cx = top.cellId % w;
+        int cy = top.cellId / w;
+        float pBias = plateGrowthBias[top.plateId];
+
+        for (int dir = 0; dir < 4; ++dir) {
+            int nx = cx + dx[dir];
+            int ny = cy + dy[dir];
+
+            if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+                int nIdx = ny * w + nx;
+                
+                float jitter = 0.95f + HashRnd(nIdx, 50) * 0.10f;
+                float stepCost = (1.0f / pBias) * jitter;
+                float newDist = top.dist + stepCost;
+
+                if (newDist < cellPlateDist[nIdx]) {
+                    cellPlateDist[nIdx] = newDist;
+                    cellPlateOwner[nIdx] = top.plateId;
+                    pq.push(PQElement{ newDist, nIdx, top.plateId });
+                }
+            }
+        }
+    }
+}
+
+Image LandmassGenerator::GeneratePlateMapImage() {
+    int w = config.mapWidth;
+    int h = config.mapHeight;
+    Image img = GenImageColor(w, h, BLACK);
+
+    Color seedColor = Color{ 255, 255, 255, 255 };
+
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            int cellId = y * w + x;
+            int owner = cellPlateOwner[cellId];
+            Color c = (owner >= 0 && owner < (int)plateColors.size()) ? plateColors[owner] : BLACK;
+            ImageDrawPixel(&img, x, y, c);
+        }
+    }
+
+    if (config.drawSeedPoints) {
+        for (int seedCell : plateSeedCells) {
+            int sx = seedCell % w;
+            int sy = seedCell / w;
+            ImageDrawPixel(&img, sx, sy, seedColor);
+            if (sx > 0) ImageDrawPixel(&img, sx - 1, sy, seedColor);
+            if (sx < w - 1) ImageDrawPixel(&img, sx + 1, sy, seedColor);
+            if (sy > 0) ImageDrawPixel(&img, sx, sy - 1, seedColor);
+            if (sy < h - 1) ImageDrawPixel(&img, sx, sy + 1, seedColor);
+        }
+    }
+
+    return img;
+}
+
+/* =========================================================================
+   Step 3: Calculate Continental Interior Signed Distance Field (SDF)
+   ========================================================================= */
+
+void LandmassGenerator::CalculateContinentalPlateSDF() {
+    int w = config.mapWidth;
+    int h = config.mapHeight;
+    int totalCells = w * h;
+
+    cellSDF.assign(totalCells, 0.0f);
+    cellIsBoundary.assign(totalCells, false);
+    continentalBoundaryCellIds.clear();
+
+    std::queue<int> q;
+
+    int dx[4] = { -1, 1, 0, 0 };
+    int dy[4] = { 0, 0, -1, 1 };
+
+    // 1. Identify Continental Coastline Boundary Cells (adjacent ONLY to Oceanic plates or grid edges)
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            int cellId = y * w + x;
+            int owner = cellPlateOwner[cellId];
+
+            if (owner < 0 || owner >= (int)plateTypes.size() || plateTypes[owner] == PlateType::OCEANIC) {
+                cellSDF[cellId] = 0.0f;
+                continue;
+            }
+
+            bool touchesOcean = false;
+            for (int dir = 0; dir < 4; ++dir) {
+                int nx = x + dx[dir];
+                int ny = y + dy[dir];
+
+                if (nx < 0 || nx >= w || ny < 0 || ny >= h) {
+                    touchesOcean = true;
+                    break;
+                } else {
+                    int nIdx = ny * w + nx;
+                    int nOwner = cellPlateOwner[nIdx];
+                    if (nOwner < 0 || nOwner >= (int)plateTypes.size() || plateTypes[nOwner] == PlateType::OCEANIC) {
+                        touchesOcean = true;
+                        break;
+                    }
+                }
+            }
+
+            if (touchesOcean) {
+                cellIsBoundary[cellId] = true;
+                continentalBoundaryCellIds.push_back(cellId);
+                cellSDF[cellId] = 0.0f;
+                q.push(cellId);
+            } else {
+                cellSDF[cellId] = 1e9f;
+            }
+        }
+    }
+
+    // 2. Multi-Source BFS Distance Propagation Inward across all continental plates
+    while (!q.empty()) {
+        int curr = q.front();
+        q.pop();
+
+        int cx = curr % w;
+        int cy = curr / w;
+        float currentDist = cellSDF[curr];
+
+        for (int dir = 0; dir < 4; ++dir) {
+            int nx = cx + dx[dir];
+            int ny = cy + dy[dir];
+
+            if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+                int nIdx = ny * w + nx;
+                int nOwner = cellPlateOwner[nIdx];
+
+                if (nOwner >= 0 && nOwner < (int)plateTypes.size() && plateTypes[nOwner] == PlateType::CONTINENTAL) {
+                    if (cellSDF[nIdx] > currentDist + 1.0f) {
+                        cellSDF[nIdx] = currentDist + 1.0f;
+                        q.push(nIdx);
+                    }
+                }
+            }
+        }
+    }
+}
+
+void LandmassGenerator::DetectAllPlateBoundaries() {
+    int w = config.mapWidth;
+    int h = config.mapHeight;
+    int totalCells = w * h;
+
+    cellIsPlateBoundary.assign(totalCells, false);
+    allPlateBoundaryCellIds.clear();
+
+    int dx[4] = { -1, 1, 0, 0 };
+    int dy[4] = { 0, 0, -1, 1 };
+
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            int cellId = y * w + x;
+            int owner = cellPlateOwner[cellId];
+
+            bool isBoundary = false;
+            for (int dir = 0; dir < 4; ++dir) {
+                int nx = x + dx[dir];
+                int ny = y + dy[dir];
+
+                if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+                    int nIdx = ny * w + nx;
+                    if (cellPlateOwner[nIdx] != owner) {
+                        isBoundary = true;
+                        break;
+                    }
+                }
+            }
+
+            if (isBoundary) {
+                cellIsPlateBoundary[cellId] = true;
+                allPlateBoundaryCellIds.push_back(cellId);
+            }
+        }
+    }
+}
+
+Image LandmassGenerator::GeneratePlateSDFMapImage() {
+    int w = config.mapWidth;
+    int h = config.mapHeight;
+    Image img = GenImageColor(w, h, BLACK);
+
+    Color oceanBaseColor     = Color{ 21, 101, 192, 255 };  // Deep Ocean Blue
+    Color boundaryYellow     = Color{ 255, 235, 59, 255 };  // Bright Coastline Boundary Yellow
+    Color plateBoundaryColor = Color{ 255, 87, 34, 255 };   // Inter-plate boundary Orange/Red
+    Color seedWhite          = Color{ 255, 255, 255, 255 }; // Seed Marker White
+    Color landmassSeedColor  = Color{ 233, 30, 99, 255 };   // Landmass seed Magenta
+
+    float maxDepth = std::max(1.0f, config.maxSDFDepth);
+
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            int cellId = y * w + x;
+            int owner = cellPlateOwner[cellId];
+            Color c;
+
+            if (owner < 0 || owner >= (int)plateTypes.size() || plateTypes[owner] == PlateType::OCEANIC) {
+                int plateIdx = std::max(0, owner);
+                Color pColor = (plateIdx < (int)plateColors.size()) ? plateColors[plateIdx] : oceanBaseColor;
+                c = Color{
+                    (unsigned char)(20 + pColor.r * 0.15f),
+                    (unsigned char)(80 + pColor.g * 0.15f),
+                    (unsigned char)(180 + pColor.b * 0.20f),
+                    255
+                };
+            } else {
+                float sdfVal = cellSDF[cellId];
+                float t = std::clamp(sdfVal / maxDepth, 0.0f, 1.0f);
+
+                if (!config.drawSDFColors) {
+                    c = Color{ 46, 125, 50, 255 };
+                } else {
+                    unsigned char r = (unsigned char)((1.0f - t) * 140.0f + t * 15.0f);
+                    unsigned char g = (unsigned char)((1.0f - t) * 210.0f + t * 85.0f);
+                    unsigned char b = (unsigned char)((1.0f - t) * 90.0f  + t * 30.0f);
+                    c = Color{ r, g, b, 255 };
+                }
+            }
+            ImageDrawPixel(&img, x, y, c);
+        }
+    }
+
+    // Highlight Inter-Plate Boundaries in Orange/Red if enabled
+    if (config.drawPlateBoundaries) {
+        for (int pbCell : allPlateBoundaryCellIds) {
+            int pbx = pbCell % w;
+            int pby = pbCell / w;
+            ImageDrawPixel(&img, pbx, pby, plateBoundaryColor);
+        }
+    }
+
+    // Highlight Continental Coastline Boundaries in Bright Yellow
+    if (config.drawBoundaries) {
+        for (int bCell : continentalBoundaryCellIds) {
+            int bx = bCell % w;
+            int by = bCell / w;
+            ImageDrawPixel(&img, bx, by, boundaryYellow);
+        }
+    }
+
+    // Draw Tectonic Seed Markers
+    if (config.drawSeedPoints) {
+        for (int seedCell : plateSeedCells) {
+            int sx = seedCell % w;
+            int sy = seedCell / w;
+            ImageDrawPixel(&img, sx, sy, seedWhite);
+            if (sx > 0) ImageDrawPixel(&img, sx - 1, sy, seedWhite);
+            if (sx < w - 1) ImageDrawPixel(&img, sx + 1, sy, seedWhite);
+            if (sy > 0) ImageDrawPixel(&img, sx, sy - 1, seedWhite);
+            if (sy < h - 1) ImageDrawPixel(&img, sx, sy + 1, seedWhite);
+        }
+    }
+
+    // Draw Adaptive Continental Landmass Seeds
+    if (config.drawLandmassSeeds) {
+        for (const auto& sp : continentalLandmassSeeds) {
+            int lx = (int)(((sp.x + 1.0f) * 0.5f) * (float)w);
+            int ly = (int)(((sp.y + 1.0f) * 0.5f) * (float)h);
+
+            if (lx >= 0 && lx < w && ly >= 0 && ly < h) {
+                ImageDrawPixel(&img, lx, ly, landmassSeedColor);
+                if (lx > 0) ImageDrawPixel(&img, lx - 1, ly, landmassSeedColor);
+                if (lx < w - 1) ImageDrawPixel(&img, lx + 1, ly, landmassSeedColor);
+                if (ly > 0) ImageDrawPixel(&img, lx, ly - 1, landmassSeedColor);
+                if (ly < h - 1) ImageDrawPixel(&img, lx, ly + 1, landmassSeedColor);
+            }
+        }
+    }
+
+    return img;
+}
+
+/* =========================================================================
+   Step 4: Generate Continental Adaptive Landmass Seeds & Heightmap
+   ========================================================================= */
+
+void LandmassGenerator::GenerateContinentalLandmassSeeds() {
+    int w = config.mapWidth;
+    int h = config.mapHeight;
+    continentalLandmassSeeds.clear();
 
     auto HashRnd = [this](int id, int offset) {
         int n = id * 374761393 + config.seed * 668265263 + offset * 144662241;
@@ -71,42 +429,153 @@ std::vector<SeedPoint> LandmassGenerator::GenerateSeedPoints() {
     int maxArms = std::max(3, (int)roundf(HARDCODED_STARFISH_ARMS));
     int armsRange = std::max(1, maxArms - minArms + 1);
 
-    if (config.falloffMode == FalloffMode::SingleCenter || config.seedCount <= 1) {
-        FalloffType shape = config.falloffType;
-        if (shape == FalloffType::RandomPerSeed) {
-            shape = availableShapes[(int)(HashRnd(0, 4) * numAvailable) % numAvailable];
+    // 1. Gather all candidate continental cells with SDF >= minInteriorSDF
+    std::vector<int> candidates;
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            int cellId = y * w + x;
+            int owner = cellPlateOwner[cellId];
+            if (owner >= 0 && owner < (int)plateTypes.size() && plateTypes[owner] == PlateType::CONTINENTAL) {
+                if (cellSDF[cellId] >= config.minInteriorSDF) {
+                    candidates.push_back(cellId);
+                }
+            }
         }
-        float starArms = (float)(minArms + (int)(HashRnd(0, 5) * armsRange) % armsRange);
-        float diamondAngle = HashRnd(0, 7) * 90.0f;
-        float diamondAspect = 0.6f + HashRnd(0, 8) * 1.0f; // 0.6 to 1.6 aspect ratio
-        points.push_back(SeedPoint{ 0.0f, 0.0f, 1.0f, shape, starArms, HARDCODED_STARFISH_AMP, diamondAngle, diamondAspect });
-        return points;
     }
 
-    for (int i = 0; i < config.seedCount; ++i) {
-        float angle = HashRnd(i, 1) * 2.0f * PI;
-        float dist = sqrtf(HashRnd(i, 2)) * config.seedSpread;
-        float sx = cosf(angle) * dist;
-        float sy = sinf(angle) * dist;
-        float r = config.seedMinRadius + HashRnd(i, 3) * std::max(0.01f, config.seedMaxRadius - config.seedMinRadius);
+    if (candidates.empty()) return;
 
-        FalloffType shape = config.falloffType;
-        if (shape == FalloffType::RandomPerSeed) {
-            int shapeIdx = (int)(HashRnd(i, 4) * numAvailable) % numAvailable;
-            shape = availableShapes[shapeIdx];
+    // 2. Poisson-Disk sampling to place adaptive seeds
+    int seedIdx = 0;
+    float minSpacing = std::max(4.0f, config.seedSpacing);
+
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        int pick = (int)(HashRnd((int)i, 100) * (float)candidates.size()) % candidates.size();
+        int cellId = candidates[pick];
+        int cx = cellId % w;
+        int cy = cellId / w;
+
+        bool valid = true;
+        for (const auto& sp : continentalLandmassSeeds) {
+            float sx = ((sp.x + 1.0f) * 0.5f) * (float)w;
+            float sy = ((sp.y + 1.0f) * 0.5f) * (float)h;
+
+            float dist = sqrtf((cx - sx) * (cx - sx) + (cy - sy) * (cy - sy));
+            if (dist < minSpacing) {
+                valid = false;
+                break;
+            }
         }
 
-        // Randomize number of arms per starfish seed in range [3, HARDCODED_STARFISH_ARMS]
-        float starArms = (float)(minArms + (int)(HashRnd(i, 5) * armsRange) % armsRange);
-        float starAmp = std::clamp(HARDCODED_STARFISH_AMP * (0.8f + HashRnd(i, 6) * 0.4f), 0.05f, 0.60f);
+        if (valid) {
+            float localSDF = cellSDF[cellId];
+            float rNorm = std::clamp(config.radiusScale * (localSDF / (float)w), 0.08f, 0.75f);
 
-        // Randomize diamond rotation angle [0..90 deg] and aspect ratio [0.6..1.6] per seed center
-        float diamondAngle = HashRnd(i, 7) * 90.0f;
-        float diamondAspect = 0.6f + HashRnd(i, 8) * 1.0f;
+            float nx = ((float)cx / (float)w) * 2.0f - 1.0f;
+            float ny = ((float)cy / (float)h) * 2.0f - 1.0f;
 
-        points.push_back(SeedPoint{ sx, sy, r, shape, starArms, starAmp, diamondAngle, diamondAspect });
+            int shapeIdx = (int)(HashRnd(seedIdx, 101) * numAvailable) % numAvailable;
+            FalloffType shape = availableShapes[shapeIdx];
+
+            float starArms = (float)(minArms + (int)(HashRnd(seedIdx, 102) * armsRange) % armsRange);
+            float starAmp = std::clamp(HARDCODED_STARFISH_AMP * (0.8f + HashRnd(seedIdx, 103) * 0.4f), 0.05f, 0.60f);
+
+            float diamondAngle = HashRnd(seedIdx, 104) * 90.0f;
+            float diamondAspect = 0.6f + HashRnd(seedIdx, 105) * 1.0f;
+
+            continentalLandmassSeeds.push_back(SeedPoint{ nx, ny, rNorm, shape, starArms, starAmp, diamondAngle, diamondAspect });
+            seedIdx++;
+        }
     }
-    return points;
+}
+
+void LandmassGenerator::GenerateContinentalHeightmapData() {
+    int w = config.mapWidth;
+    int h = config.mapHeight;
+    heightmap.assign(w * h, 0.0f);
+
+    FastNoiseLite noise;
+    noise.SetSeed(config.seed);
+    noise.SetNoiseType(HARDCODED_NOISE_TYPE);
+    noise.SetFractalType(HARDCODED_FRACTAL_TYPE);
+    noise.SetFractalOctaves(HARDCODED_OCTAVES);
+    noise.SetFractalGain(NOISE_GAIN);
+    noise.SetFractalLacunarity(NOISE_LACUNARITY);
+
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            int cellId = y * w + x;
+            int owner = cellPlateOwner[cellId];
+
+            if (owner < 0 || owner >= (int)plateTypes.size() || plateTypes[owner] == PlateType::OCEANIC) {
+                heightmap[cellId] = 0.0f;
+                continue;
+            }
+
+            float u = (float)x / (float)w;
+            float v = (float)y / (float)h;
+
+            float nx = u * 2.0f - 1.0f;
+            float ny = v * 2.0f - 1.0f;
+
+            float multiSeedMask = continentalLandmassSeeds.empty() ? 1.0f : CalculateMultiSeedMask(nx, ny, continentalLandmassSeeds);
+
+            float sdfClamp = std::clamp(cellSDF[cellId] / std::max(1.0f, config.maxSDFDepth), 0.0f, 1.0f);
+            sdfClamp = powf(sdfClamp, config.falloffPower);
+
+            float noiseScale = config.frequency * config.details * 10.0f;
+            float rawNoise = noise.GetNoise(u * noiseScale, v * noiseScale);
+            float normalizedNoise = (rawNoise + 1.0f) * 0.5f;
+
+            heightmap[cellId] = std::clamp(normalizedNoise * multiSeedMask * sdfClamp, 0.0f, 1.0f);
+        }
+    }
+}
+
+/* =========================================================================
+   Falloff & Standard Image Outputs
+   ========================================================================= */
+
+float LandmassGenerator::EvaluateSeedFalloff(float dx, float dy, const SeedPoint& sp) {
+    float r = std::max(0.01f, sp.radius);
+    FalloffType shape = sp.shape;
+
+    if (shape == FalloffType::Radial) {
+        float normD = sqrtf(dx * dx + dy * dy) / r;
+        return powf(std::max(0.0f, 1.0f - normD), config.falloffPower);
+    } 
+    else if (shape == FalloffType::Diamond) {
+        float rad = sp.diamondAngle * (PI / 180.0f);
+        float cosA = cosf(rad);
+        float sinA = sinf(rad);
+        float rx = dx * cosA - dy * sinA;
+        float ry = dx * sinA + dy * cosA;
+
+        float aspect = std::max(0.1f, sp.diamondAspect);
+        float normX = fabsf(rx) / (r * aspect);
+        float normY = fabsf(ry) / (r / aspect);
+
+        float q = std::clamp(HARDCODED_DIAMOND_PINCH, 0.4f, 2.0f);
+        float normD = powf(powf(normX, q) + powf(normY, q), 1.0f / q);
+
+        return powf(std::max(0.0f, 1.0f - normD), config.falloffPower);
+    } 
+    else if (shape == FalloffType::Starfish) {
+        float angle = atan2f(dy, dx);
+        float normRadiusRatio = std::clamp(r / std::max(0.01f, config.seedMaxRadius), 0.1f, 1.0f);
+        float effectiveAmp = sp.starAmp * powf(normRadiusRatio, HARDCODED_STARFISH_DAMPENING);
+        float modulation = 1.0f + effectiveAmp * sinf(sp.starArms * angle);
+        float dist = sqrtf(dx * dx + dy * dy) * modulation;
+        float normD = dist / r;
+        return powf(std::max(0.0f, 1.0f - normD), config.falloffPower);
+    }
+
+    float normD = sqrtf(dx * dx + dy * dy) / r;
+    return powf(std::max(0.0f, 1.0f - normD), config.falloffPower);
+}
+
+std::vector<SeedPoint> LandmassGenerator::GenerateSeedPoints() {
+    return continentalLandmassSeeds;
 }
 
 float LandmassGenerator::CalculateMultiSeedMask(float nx, float ny, const std::vector<SeedPoint>& seeds) {
@@ -140,40 +609,7 @@ float LandmassGenerator::CalculateMultiSeedMask(float nx, float ny, const std::v
 }
 
 void LandmassGenerator::GenerateLandmassData() {
-    int w = config.mapWidth;
-    int h = config.mapHeight;
-    heightmap.assign(w * h, 0.0f);
-
-    std::vector<SeedPoint> seeds = GenerateSeedPoints();
-
-    FastNoiseLite noise;
-    noise.SetSeed(config.seed);
-    noise.SetNoiseType(HARDCODED_NOISE_TYPE);     // Hardcoded OpenSimplex2
-    noise.SetFractalType(HARDCODED_FRACTAL_TYPE); // Hardcoded Ridged
-    noise.SetFractalOctaves(HARDCODED_OCTAVES);   // Hardcoded Octaves = 4
-    noise.SetFractalGain(NOISE_GAIN);             // Hardcoded Gain = 0.4f
-    noise.SetFractalLacunarity(NOISE_LACUNARITY); // Hardcoded Lacunarity = 2.1f
-
-    for (int y = 0; y < h; ++y) {
-        for (int x = 0; x < w; ++x) {
-            // Normalized coordinates [0..1] for grid-resolution invariance
-            float u = (float)x / (float)w;
-            float v = (float)y / (float)h;
-
-            // Normalized centered coordinates [-1..1] for falloff mask
-            float nx = u * 2.0f - 1.0f;
-            float ny = v * 2.0f - 1.0f;
-
-            float mask = CalculateMultiSeedMask(nx, ny, seeds);
-
-            // Frequency & Details multiplier relative to normalized UV coordinates (resolution-independent!)
-            float noiseScale = config.frequency * config.details * 10.0f;
-            float rawNoise = noise.GetNoise(u * noiseScale, v * noiseScale);
-            float normalizedNoise = (rawNoise + 1.0f) * 0.5f;
-
-            heightmap[y * w + x] = std::clamp(normalizedNoise * mask, 0.0f, 1.0f);
-        }
-    }
+    GenerateContinentalHeightmapData();
 }
 
 Image LandmassGenerator::GenerateCoastlineImage() {
@@ -181,9 +617,9 @@ Image LandmassGenerator::GenerateCoastlineImage() {
     int h = config.mapHeight;
     Image img = GenImageColor(w, h, BLACK);
 
-    Color oceanColor     = Color{ 21, 101, 192, 255 };  // Deep Blue
-    Color landColor      = Color{ 46, 125, 50, 255 };   // Emerald Green
-    Color coastlineColor = Color{ 255, 215, 0, 255 };   // Bright Gold Outline
+    Color oceanColor     = Color{ 21, 101, 192, 255 };
+    Color landColor      = Color{ 46, 125, 50, 255 };
+    Color coastlineColor = Color{ 255, 215, 0, 255 };
 
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < w; ++x) {
@@ -191,11 +627,11 @@ Image LandmassGenerator::GenerateCoastlineImage() {
             Color c;
 
             if (fabsf(val - config.waterLevel) <= config.coastLineWidth) {
-                c = coastlineColor; // Highlight coastline boundary edge
+                c = coastlineColor;
             } else if (val > config.waterLevel) {
-                c = landColor;      // Landmass
+                c = landColor;
             } else {
-                c = oceanColor;     // Ocean
+                c = oceanColor;
             }
             ImageDrawPixel(&img, x, y, c);
         }
@@ -208,7 +644,7 @@ Image LandmassGenerator::GenerateHeightmapImage() {
     int h = config.mapHeight;
     Image img = GenImageColor(w, h, BLACK);
 
-    Color contourColor = Color{ 0, 225, 255, 255 }; // Bright Cyan Coastline Overlay
+    Color contourColor = Color{ 0, 225, 255, 255 };
 
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < w; ++x) {
