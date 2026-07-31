@@ -1,4 +1,4 @@
-#include "IslandTesting.hpp"
+#include "LandmassTesting.hpp"
 #include "ConsoleLog.hpp"
 #include "imgui/imgui.h"
 #include "raylib/raymath.h"
@@ -7,15 +7,15 @@
 #include <algorithm>
 #include <cstdlib>
 
-IslandTesting::IslandTesting()
-    : Application(1280, 720, "2D Island Coastline Testing Engine") {
+LandmassTesting::LandmassTesting()
+    : Application(1280, 720, "2D Landmass Coastline Testing Engine") {
     show3DViewportTab = false; // Pure 2D texture viewport mode
 }
 
-IslandTesting::~IslandTesting() {
+LandmassTesting::~LandmassTesting() {
 }
 
-float IslandTesting::EvaluateSeedFalloff(float dx, float dy, const SeedPoint& sp) {
+float LandmassTesting::EvaluateSeedFalloff(float dx, float dy, const SeedPoint& sp) {
     float r = std::max(0.01f, sp.radius);
     FalloffType shape = sp.shape;
 
@@ -57,7 +57,7 @@ float IslandTesting::EvaluateSeedFalloff(float dx, float dy, const SeedPoint& sp
     return powf(std::max(0.0f, 1.0f - normD), config.falloffPower);
 }
 
-std::vector<SeedPoint> IslandTesting::GenerateSeedPoints() {
+std::vector<SeedPoint> LandmassTesting::GenerateSeedPoints() {
     std::vector<SeedPoint> points;
 
     auto HashRnd = [this](int id, int offset) {
@@ -115,7 +115,7 @@ std::vector<SeedPoint> IslandTesting::GenerateSeedPoints() {
     return points;
 }
 
-float IslandTesting::CalculateMultiSeedMask(float nx, float ny, const std::vector<SeedPoint>& seeds) {
+float LandmassTesting::CalculateMultiSeedMask(float nx, float ny, const std::vector<SeedPoint>& seeds) {
     if (seeds.empty()) return 1.0f;
 
     if (config.falloffMode == FalloffMode::SingleCenter) {
@@ -145,7 +145,7 @@ float IslandTesting::CalculateMultiSeedMask(float nx, float ny, const std::vecto
     return 1.0f;
 }
 
-void IslandTesting::GenerateIslandData() {
+void LandmassTesting::GenerateLandmassData() {
     int w = config.mapWidth;
     int h = config.mapHeight;
     heightmap.assign(w * h, 0.0f);
@@ -182,7 +182,7 @@ void IslandTesting::GenerateIslandData() {
     }
 }
 
-Image IslandTesting::GenerateCoastlineImage() {
+Image LandmassTesting::GenerateCoastlineImage() {
     int w = config.mapWidth;
     int h = config.mapHeight;
     Image img = GenImageColor(w, h, BLACK);
@@ -209,7 +209,7 @@ Image IslandTesting::GenerateCoastlineImage() {
     return img;
 }
 
-Image IslandTesting::GenerateHeightmapImage() {
+Image LandmassTesting::GenerateHeightmapImage() {
     int w = config.mapWidth;
     int h = config.mapHeight;
     Image img = GenImageColor(w, h, BLACK);
@@ -233,28 +233,28 @@ Image IslandTesting::GenerateHeightmapImage() {
     return img;
 }
 
-Texture2D IslandTesting::ReloadCoastlineCallback() {
-    GenerateIslandData();
+Texture2D LandmassTesting::ReloadCoastlineCallback() {
+    GenerateLandmassData();
     Image img = GenerateCoastlineImage();
     Texture2D tex = LoadTextureFromImage(img);
     UnloadImage(img);
     return tex;
 }
 
-Texture2D IslandTesting::ReloadHeightmapCallback() {
+Texture2D LandmassTesting::ReloadHeightmapCallback() {
     Image img = GenerateHeightmapImage();
     Texture2D tex = LoadTextureFromImage(img);
     UnloadImage(img);
     return tex;
 }
 
-void IslandTesting::TriggerViewportReloads() {
+void LandmassTesting::TriggerViewportReloads() {
     ReloadTextureViewport(coastlineViewportId);
     ReloadTextureViewport(heightmapViewportId);
 }
 
-void IslandTesting::Init() {
-    GenerateIslandData();
+void LandmassTesting::Init() {
+    GenerateLandmassData();
 
     Image coastImg = GenerateCoastlineImage();
     coastlineTexture = LoadTextureFromImage(coastImg);
@@ -272,11 +272,11 @@ void IslandTesting::Init() {
         return ReloadHeightmapCallback();
     }, true);
 
-    ConsoleLog::Get().AddLog(LogLevel::Info, "IslandTesting initialized with hardcoded shape refinement constants.");
+    ConsoleLog::Get().AddLog(LogLevel::Info, "LandmassTesting initialized.");
     ConsoleLog::Get().AddLog(LogLevel::Info, "Registered Coastline and Heightmap Raylib Texture2D viewports with callbacks.");
 }
 
-void IslandTesting::Update(float deltaTime) {
+void LandmassTesting::Update(float deltaTime) {
     if (!ImGui::GetIO().WantCaptureKeyboard) {
         if (IsKeyPressed(KEY_LEFT)) {
             if (config.seed > 1) {
@@ -293,7 +293,7 @@ void IslandTesting::Update(float deltaTime) {
     }
 }
 
-void IslandTesting::DrawUI() {
+void LandmassTesting::DrawUI() {
     ImGui::TextDisabled("Coastline Generator Controls");
     ImGui::Separator();
 
@@ -333,7 +333,7 @@ void IslandTesting::DrawUI() {
     }
 
     // 3. Multi-Seed Spacing & Falloff Mask Controls
-    if (ImGui::CollapsingHeader("Island Form & Multi-Seed Spacing", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::CollapsingHeader("Landmass Form & Multi-Seed Spacing", ImGuiTreeNodeFlags_DefaultOpen)) {
         const char* modeItems[] = { "Single Center (Classic)", "Multi-Seed Nearest (Voronoi)", "Multi-Seed Metaball (Organic)" };
         int currentMode = (int)config.falloffMode;
         if (ImGui::Combo("Falloff Mode", &currentMode, modeItems, IM_ARRAYSIZE(modeItems))) {
@@ -378,6 +378,6 @@ void IslandTesting::DrawUI() {
     }
 }
 
-void IslandTesting::Shutdown() {
-    ConsoleLog::Get().AddLog(LogLevel::Info, "IslandTesting application shut down.");
+void LandmassTesting::Shutdown() {
+    ConsoleLog::Get().AddLog(LogLevel::Info, "LandmassTesting application shut down.");
 }

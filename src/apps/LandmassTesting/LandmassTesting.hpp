@@ -41,7 +41,7 @@ struct SeedPoint {
     float diamondAspect; // Randomized per-seed aspect ratio [0.6..1.6]
 };
 
-struct IslandConfig {
+struct LandmassConfig {
     int mapWidth = 256;
     int mapHeight = 256;
     int seed = 328; // User default starting seed
@@ -53,7 +53,7 @@ struct IslandConfig {
     // Multi-Seed Falloff Mask Settings
     FalloffMode falloffMode = FalloffMode::MultiSeedMetaball;
     FalloffType falloffType = FalloffType::RandomPerSeed; // Random per-seed by default!
-    int seedCount = 12;            // Number of island seed centers
+    int seedCount = 12;            // Number of landmass seed centers
     float seedSpread = 0.84f;      // How spread out seed centers are across the map
     float seedMinRadius = 0.28f;   // Min radius of influence per seed
     float seedMaxRadius = 0.70f;   // Max radius of influence per seed
@@ -64,9 +64,9 @@ struct IslandConfig {
     float details = 10.88f;         // Details multiplier for fine coastline noise scale
 };
 
-class IslandTesting : public Application {
+class LandmassTesting : public Application {
 private:
-    IslandConfig config;
+    LandmassConfig config;
     std::vector<float> heightmap;
 
     Texture2D coastlineTexture = { 0 };
@@ -78,17 +78,17 @@ private:
     bool autoReloadOnSliderChange = true;
 
 public:
-    IslandTesting();
-    ~IslandTesting() override;
+    LandmassTesting();
+    ~LandmassTesting() override;
 
     void Init() override;
-    void Update(float deltaTime);
+    void Update(float deltaTime) override;
     void SceneDraw() override {} // Pure 2D mode uses Texture Viewports
     void DrawUI() override;
     void Shutdown() override;
 
 private:
-    void GenerateIslandData();
+    void GenerateLandmassData();
     std::vector<SeedPoint> GenerateSeedPoints();
     float EvaluateSeedFalloff(float dx, float dy, const SeedPoint& sp);
     float CalculateMultiSeedMask(float nx, float ny, const std::vector<SeedPoint>& seeds);

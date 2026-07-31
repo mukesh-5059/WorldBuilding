@@ -1,12 +1,12 @@
-# Hardcoded Parameters & Default Configurations (`IslandTesting`)
+# Hardcoded Parameters & Default Configurations (`LandmassTesting`)
 
-This document records all **hardcoded mathematical constants**, **noise parameters**, **shape refinement values**, and **default starting configurations** used in the 2D Island Coastline Generator (`src/apps/IslandTesting`).
+This document records all **hardcoded mathematical constants**, **noise parameters**, **shape refinement values**, and **default starting configurations** used in the 2D Landmass Coastline Generator (`src/apps/LandmassTesting`).
 
 ---
 
 ## 1. Hardcoded FastNoise Lite Constants
 
-These parameters are compiled as `constexpr` constants in [`IslandTesting.hpp`](file:///home/mukes/dev/C++/Projects/WorldBuilding/src/apps/IslandTesting/IslandTesting.hpp#L8-L12) and applied directly during heightmap generation:
+These parameters are compiled as `constexpr` constants in [`LandmassTesting.hpp`](file:///home/mukes/dev/C++/Projects/WorldBuilding/src/apps/LandmassTesting/LandmassTesting.hpp#L8-L12) and applied directly during heightmap generation:
 
 | Parameter | C++ Variable Name | Hardcoded Value | Description |
 | :--- | :--- | :--- | :--- |
@@ -20,7 +20,7 @@ These parameters are compiled as `constexpr` constants in [`IslandTesting.hpp`](
 
 ## 2. Hardcoded Shape Refinement Constants
 
-These geometric constants in [`IslandTesting.hpp`](file:///home/mukes/dev/C++/Projects/WorldBuilding/src/apps/IslandTesting/IslandTesting.hpp#L14-L18) refine Starfish and Diamond falloff shapes to prevent unwanted artifacts:
+These geometric constants in [`LandmassTesting.hpp`](file:///home/mukes/dev/C++/Projects/WorldBuilding/src/apps/LandmassTesting/LandmassTesting.hpp#L14-L18) refine Starfish and Diamond falloff shapes to prevent unwanted artifacts:
 
 | Parameter | C++ Variable Name | Hardcoded Value | Description |
 | :--- | :--- | :--- | :--- |
@@ -33,7 +33,7 @@ These geometric constants in [`IslandTesting.hpp`](file:///home/mukes/dev/C++/Pr
 
 ## 3. Automated Per-Seed Randomization Bounds
 
-When generating multi-seed islands, the following properties are randomized deterministically per seed center $P_i$ using hash noise:
+When generating multi-seed landmasses, the following properties are randomized deterministically per seed center $P_i$ using hash noise:
 
 | Property | Randomized Range / Formula | Purpose |
 | :--- | :--- | :--- |
@@ -44,12 +44,12 @@ When generating multi-seed islands, the following properties are randomized dete
 
 ---
 
-## 4. Default Application Configuration (`IslandConfig`)
+## 4. Default Application Configuration (`LandmassConfig`)
 
 Starting UI inspector values loaded upon launch:
 
 ```cpp
-struct IslandConfig {
+struct LandmassConfig {
     int mapWidth = 256;               // Grid Resolution Width
     int mapHeight = 256;              // Grid Resolution Height
     int seed = 328;                   // Default Map Seed
@@ -60,7 +60,7 @@ struct IslandConfig {
     FalloffMode falloffMode = FalloffMode::MultiSeedMetaball; // Organic potential blending
     FalloffType falloffType = FalloffType::RandomPerSeed;     // Per-seed shape randomization
 
-    int seedCount = 12;               // Number of island seed centers
+    int seedCount = 12;               // Number of landmass seed centers
     float seedSpread = 0.84f;         // Spread radius of seed centers across the map
     float seedMinRadius = 0.28f;      // Min influence radius per seed
     float seedMaxRadius = 0.70f;      // Max influence radius per seed
@@ -75,7 +75,7 @@ struct IslandConfig {
 
 ## 5. Grid-Resolution Invariance Formula
 
-Noise sampling coordinates are normalized to UV space $[0, 1]$ before scaling, ensuring island coastline shapes remain **100% identical regardless of resolution** (128x128, 256x256, 512x512, 1024x1024):
+Noise sampling coordinates are normalized to UV space $[0, 1]$ before scaling, ensuring landmass coastline shapes remain **100% identical regardless of resolution** (128x128, 256x256, 512x512, 1024x1024):
 
 $$u = \frac{x}{\text{mapWidth}}, \qquad v = \frac{y}{\text{mapHeight}}$$
 

@@ -7,7 +7,7 @@ file(GLOB rlimgui dependencies/lib/rlimgui/*.cpp)
 
 file(GLOB core_src src/core/*.cpp)
 file(GLOB world_builder_src src/apps/WorldBuilder/*.cpp)
-file(GLOB island_testing_src src/apps/IslandTesting/*.cpp)
+file(GLOB landmass_testing_src src/apps/LandmassTesting/*.cpp)
 
 set(COMMON_INCLUDES
     dependencies/includes
@@ -15,7 +15,7 @@ set(COMMON_INCLUDES
     src/includes
     src/core
     src/apps/WorldBuilder
-    src/apps/IslandTesting
+    src/apps/LandmassTesting
 )
 
 set(COMMON_LIBS
@@ -33,7 +33,7 @@ add_executable(WorldBuilder ${imgui} ${rlimgui} ${core_src} ${world_builder_src}
 target_include_directories(WorldBuilder PRIVATE ${COMMON_INCLUDES})
 target_link_libraries(WorldBuilder PRIVATE ${COMMON_LIBS})
 
-# IslandTesting mini app executable target
-add_executable(IslandTesting ${imgui} ${rlimgui} ${core_src} ${island_testing_src})
-target_include_directories(IslandTesting PRIVATE ${COMMON_INCLUDES})
-target_link_libraries(IslandTesting PRIVATE ${COMMON_LIBS})
+# LandmassTesting mini app executable target
+add_executable(LandmassTesting ${imgui} ${rlimgui} ${core_src} ${landmass_testing_src})
+target_include_directories(LandmassTesting PRIVATE ${COMMON_INCLUDES})
+target_link_libraries(LandmassTesting PRIVATE ${COMMON_LIBS})
