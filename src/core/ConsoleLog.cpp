@@ -1,4 +1,4 @@
-#include "includes/ConsoleLog.hpp"
+#include "ConsoleLog.hpp"
 #include "raylib/raylib.h"
 #include <cstdio>
 #include <cstdarg>

@@ -1,4 +1,4 @@
-#include "includes/Application.hpp"
+#include "Application.hpp"
 #include "ConsoleLog.hpp"
 #include "raylib/raylib.h"
 #include "rlimgui/rlImGui.h"
@@ -12,7 +12,7 @@ Application::Application(int width, int height, const char* title)
 
 Application::~Application() {
     for (auto& vp : textureViewports) {
-        if (vp.isLoaded) {
+        if (vp.isLoaded && vp.ownsTexture && vp.texture.id > 0) {
             UnloadTexture(vp.texture);
             vp.isLoaded = false;
         }

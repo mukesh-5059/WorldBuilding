@@ -1,4 +1,4 @@
-#include "includes/game.hpp"
+#include "game.hpp"
 
 int main() {
     WorldBuilder app;

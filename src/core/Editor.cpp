@@ -1,13 +1,14 @@
-#include "includes/Application.hpp"
+#include "Application.hpp"
 #include "ConsoleLog.hpp"
 #include "rlimgui/rlImGui.h"
 #include "imgui/imgui.h"
 #include <cstdio>
 
-void Application::AddTextureViewport(const std::string& initialPath) {
+int Application::AddTextureViewport(const std::string& initialPath) {
     TextureViewport vp;
     vp.id = nextViewportId++;
     vp.name = "Texture " + std::to_string(vp.id);
+    vp.ownsTexture = true;
     if (!initialPath.empty()) {
         snprintf(vp.filePath, sizeof(vp.filePath), "%s", initialPath.c_str());
         if (FileExists(vp.filePath)) {
@@ -20,16 +21,106 @@ void Application::AddTextureViewport(const std::string& initialPath) {
         }
     }
     textureViewports.push_back(vp);
+    return vp.id;
+}
+
+int Application::AddTextureViewport(Texture2D texture, const std::string& name, std::function<Texture2D()> reloadCallback, bool ownsTexture) {
+    TextureViewport vp;
+    vp.id = nextViewportId++;
+    vp.name = name.empty() ? ("Texture " + std::to_string(vp.id)) : name;
+    vp.texture = texture;
+    vp.isLoaded = (texture.id > 0);
+    vp.ownsTexture = ownsTexture;
+    vp.reloadCallback = reloadCallback;
+    if (vp.isLoaded) {
+        SetTextureFilter(vp.texture, TEXTURE_FILTER_BILINEAR);
+        vp.loadedPath = "[Raylib Texture2D]";
+    }
+    textureViewports.push_back(vp);
+    return vp.id;
 }
 
 void Application::RemoveTextureViewport(int index) {
     if (index >= 0 && index < (int)textureViewports.size()) {
-        if (textureViewports[index].isLoaded) {
+        if (textureViewports[index].isLoaded && textureViewports[index].ownsTexture && textureViewports[index].texture.id > 0) {
             UnloadTexture(textureViewports[index].texture);
-            textureViewports[index].isLoaded = false;
         }
+        textureViewports[index].isLoaded = false;
         textureViewports.erase(textureViewports.begin() + index);
     }
+}
+
+void Application::SetTextureViewportCallback(int viewportId, std::function<Texture2D()> reloadCallback) {
+    for (auto& vp : textureViewports) {
+        if (vp.id == viewportId) {
+            vp.reloadCallback = reloadCallback;
+            break;
+        }
+    }
+}
+
+void Application::SetTextureViewportTexture(int viewportId, Texture2D texture, bool ownsTexture) {
+    for (auto& vp : textureViewports) {
+        if (vp.id == viewportId) {
+            if (vp.isLoaded && vp.ownsTexture && vp.texture.id > 0) {
+                UnloadTexture(vp.texture);
+            }
+            vp.texture = texture;
+            vp.isLoaded = (texture.id > 0);
+            vp.ownsTexture = ownsTexture;
+            if (vp.isLoaded) {
+                SetTextureFilter(vp.texture, TEXTURE_FILTER_BILINEAR);
+            }
+            break;
+        }
+    }
+}
+
+void Application::ReloadTextureViewport(TextureViewport& vp) {
+    if (vp.reloadCallback) {
+        Texture2D newTex = vp.reloadCallback();
+        if (newTex.id > 0) {
+            if (vp.isLoaded && vp.ownsTexture && vp.texture.id > 0) {
+                UnloadTexture(vp.texture);
+            }
+            vp.texture = newTex;
+            vp.isLoaded = true;
+            vp.loadedPath = "[Raylib Texture2D Callback]";
+            SetTextureFilter(vp.texture, TEXTURE_FILTER_BILINEAR);
+            ConsoleLog::Get().AddLog(LogLevel::Info, "Texture viewport '%s' reloaded via callback.", vp.name.c_str());
+        }
+    } else if (vp.filePath[0] != '\0') {
+        if (FileExists(vp.filePath)) {
+            if (vp.isLoaded && vp.ownsTexture && vp.texture.id > 0) {
+                UnloadTexture(vp.texture);
+            }
+            vp.texture = LoadTexture(vp.filePath);
+            if (vp.texture.id > 0 && vp.texture.width > 0) {
+                SetTextureFilter(vp.texture, TEXTURE_FILTER_BILINEAR);
+                vp.isLoaded = true;
+                vp.loadedPath = vp.filePath;
+                ConsoleLog::Get().AddLog(LogLevel::Info, "Texture viewport '%s' reloaded from file '%s'.", vp.name.c_str(), vp.filePath);
+            }
+        }
+    }
+}
+
+void Application::ReloadTextureViewport(int viewportId) {
+    for (auto& vp : textureViewports) {
+        if (vp.id == viewportId) {
+            ReloadTextureViewport(vp);
+            break;
+        }
+    }
+}
+
+TextureViewport* Application::GetTextureViewport(int viewportId) {
+    for (auto& vp : textureViewports) {
+        if (vp.id == viewportId) {
+            return &vp;
+        }
+    }
+    return nullptr;
 }
 
 void Application::performanceGui(){
@@ -132,36 +223,51 @@ void Application::editorGui() {
                     if (ImGui::BeginTabItem(tabLabel.c_str(), &vp.open)) {
                         ImGui::Spacing();
                         ImGui::AlignTextToFramePadding();
-                        ImGui::Text("File Path:");
-                        ImGui::SameLine();
-                        float buttonGroupWidth = 135.0f;
-                        float availableInputWidth = ImGui::GetContentRegionAvail().x - buttonGroupWidth;
-                        if (availableInputWidth < 100.0f) availableInputWidth = 100.0f;
-                        ImGui::SetNextItemWidth(availableInputWidth);
-                        ImGui::InputText(("##path_" + std::to_string(vp.id)).c_str(), vp.filePath, sizeof(vp.filePath));
-                        
-                        ImGui::SameLine();
-                        if (ImGui::Button(("Load##load_" + std::to_string(vp.id)).c_str(), ImVec2(60.0f, 0.0f))) {
-                            if (vp.filePath[0] != '\0') {
-                                if (vp.isLoaded) {
-                                    UnloadTexture(vp.texture);
-                                    vp.isLoaded = false;
-                                }
-                                if (FileExists(vp.filePath)) {
-                                    vp.texture = LoadTexture(vp.filePath);
-                                    if (vp.texture.id > 0 && vp.texture.width > 0) {
-                                        SetTextureFilter(vp.texture, TEXTURE_FILTER_BILINEAR);
-                                        vp.isLoaded = true;
-                                        vp.loadedPath = vp.filePath;
+                        if (vp.reloadCallback != nullptr) {
+                            ImGui::Text("Source: Raylib Texture2D (Callback Registered)");
+                        } else {
+                            ImGui::Text("File Path:");
+                            ImGui::SameLine();
+                            float buttonGroupWidth = 200.0f;
+                            float availableInputWidth = ImGui::GetContentRegionAvail().x - buttonGroupWidth;
+                            if (availableInputWidth < 100.0f) availableInputWidth = 100.0f;
+                            ImGui::SetNextItemWidth(availableInputWidth);
+                            ImGui::InputText(("##path_" + std::to_string(vp.id)).c_str(), vp.filePath, sizeof(vp.filePath));
+                            
+                            ImGui::SameLine();
+                            if (ImGui::Button(("Load##load_" + std::to_string(vp.id)).c_str(), ImVec2(55.0f, 0.0f))) {
+                                if (vp.filePath[0] != '\0') {
+                                    if (vp.isLoaded && vp.ownsTexture && vp.texture.id > 0) {
+                                        UnloadTexture(vp.texture);
+                                        vp.isLoaded = false;
+                                    }
+                                    if (FileExists(vp.filePath)) {
+                                        vp.texture = LoadTexture(vp.filePath);
+                                        if (vp.texture.id > 0 && vp.texture.width > 0) {
+                                            SetTextureFilter(vp.texture, TEXTURE_FILTER_BILINEAR);
+                                            vp.isLoaded = true;
+                                            vp.ownsTexture = true;
+                                            vp.loadedPath = vp.filePath;
+                                        }
                                     }
                                 }
                             }
                         }
 
+                        if (vp.reloadCallback != nullptr || vp.filePath[0] != '\0') {
+                            ImGui::SameLine();
+                            if (ImGui::Button(("Reload##reload_" + std::to_string(vp.id)).c_str(), ImVec2(65.0f, 0.0f))) {
+                                ReloadTextureViewport(vp);
+                            }
+                        }
+
                         ImGui::SameLine();
-                        if (ImGui::Button(("Clear##clear_" + std::to_string(vp.id)).c_str(), ImVec2(60.0f, 0.0f))) {
-                            if (vp.isLoaded) {
+                        if (ImGui::Button(("Clear##clear_" + std::to_string(vp.id)).c_str(), ImVec2(55.0f, 0.0f))) {
+                            if (vp.isLoaded && vp.ownsTexture && vp.texture.id > 0) {
                                 UnloadTexture(vp.texture);
+                                vp.isLoaded = false;
+                                vp.texture = { 0 };
+                            } else {
                                 vp.isLoaded = false;
                                 vp.texture = { 0 };
                             }

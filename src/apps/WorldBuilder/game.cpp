@@ -1,5 +1,5 @@
-#include "includes/game.hpp"
-#include "includes/WorldGenerator.hpp"
+#include "game.hpp"
+#include "WorldGenerator.hpp"
 #include "imgui/imgui.h"
 #include "raylib/raylib.h"
 #include "raylib/raymath.h"

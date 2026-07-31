@@ -2,6 +2,7 @@
 #include "raylib/raylib.h"
 #include <vector>
 #include <string>
+#include <functional>
 
 struct TextureViewport {
     int id = 0;
@@ -11,6 +12,8 @@ struct TextureViewport {
     Texture2D texture = { 0 };
     bool isLoaded = false;
     bool open = true;
+    bool ownsTexture = true;
+    std::function<Texture2D()> reloadCallback = nullptr;
 };
 
 class Application {
@@ -37,8 +40,15 @@ protected:
     void renderResolutionGui();
     void SetRenderResolution(int newWidth, int newHeight);
     void editorGui();
-    void AddTextureViewport(const std::string& initialPath = "");
+
+    int AddTextureViewport(const std::string& initialPath = "");
+    int AddTextureViewport(Texture2D texture, const std::string& name = "", std::function<Texture2D()> reloadCallback = nullptr, bool ownsTexture = false);
     void RemoveTextureViewport(int index);
+    void SetTextureViewportCallback(int viewportId, std::function<Texture2D()> reloadCallback);
+    void SetTextureViewportTexture(int viewportId, Texture2D texture, bool ownsTexture = false);
+    void ReloadTextureViewport(int viewportId);
+    void ReloadTextureViewport(TextureViewport& vp);
+    TextureViewport* GetTextureViewport(int viewportId);
 
     virtual void Init() {}
     virtual void Update(float deltaTime) {}

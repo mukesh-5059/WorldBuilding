@@ -1,5 +1,5 @@
-#include "includes/WorldGenerator.hpp"
-#include "includes/utils.hpp"
+#include "WorldGenerator.hpp"
+#include "utils.hpp"
 #include "fastnoise/FaseNoise.h"
 #include "raylib/raymath.h"
 

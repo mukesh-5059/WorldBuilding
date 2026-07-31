@@ -1,4 +1,4 @@
-#include "includes/WorldGenerator.hpp"
+#include "WorldGenerator.hpp"
 #include <cmath>
 #include <vector>
 
