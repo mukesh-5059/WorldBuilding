@@ -189,28 +189,32 @@ void Application::editorGui() {
         // Top Viewport Panel with Tab Bar
         ImGui::BeginChild("ViewportPanel", ImVec2(mainAreaWidth, viewportHeight), false);
             if (ImGui::BeginTabBar("MainViewportTabs", ImGuiTabBarFlags_Reorderable)) {
-                // Primary Hardcoded 3D Scene Viewport
-                if (ImGui::BeginTabItem("3D Scene Viewport", nullptr, ImGuiTabItemFlags_NoCloseWithMiddleMouseButton)) {
-                    ImVec2 availSize = ImGui::GetContentRegionAvail();
-                    if (availSize.x > 0 && availSize.y > 0) {
-                        rlImGuiImageRenderTextureFit(&sceneRenderTexture, true);
-                        is3DViewportHovered = ImGui::IsItemHovered();
+                // Primary 3D Scene Viewport (rendered if enabled)
+                if (show3DViewportTab) {
+                    if (ImGui::BeginTabItem("3D Scene Viewport", nullptr, ImGuiTabItemFlags_NoCloseWithMiddleMouseButton)) {
+                        ImVec2 availSize = ImGui::GetContentRegionAvail();
+                        if (availSize.x > 0 && availSize.y > 0) {
+                            rlImGuiImageRenderTextureFit(&sceneRenderTexture, true);
+                            is3DViewportHovered = ImGui::IsItemHovered();
 
-                        if (is3DViewportHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-                            ImVec2 minP = ImGui::GetItemRectMin();
-                            ImVec2 sizeP = ImGui::GetItemRectSize();
-                            ImVec2 mouseP = ImGui::GetMousePos();
+                            if (is3DViewportHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+                                ImVec2 minP = ImGui::GetItemRectMin();
+                                ImVec2 sizeP = ImGui::GetItemRectSize();
+                                ImVec2 mouseP = ImGui::GetMousePos();
 
-                            if (sizeP.x > 0.0f && sizeP.y > 0.0f) {
-                                float normX = (mouseP.x - minP.x) / sizeP.x;
-                                float normY = (mouseP.y - minP.y) / sizeP.y;
-                                On3DViewportClicked(Vector2{ normX, normY });
+                                if (sizeP.x > 0.0f && sizeP.y > 0.0f) {
+                                    float normX = (mouseP.x - minP.x) / sizeP.x;
+                                    float normY = (mouseP.y - minP.y) / sizeP.y;
+                                    On3DViewportClicked(Vector2{ normX, normY });
+                                }
                             }
+                        } else {
+                            is3DViewportHovered = false;
                         }
+                        ImGui::EndTabItem();
                     } else {
                         is3DViewportHovered = false;
                     }
-                    ImGui::EndTabItem();
                 } else {
                     is3DViewportHovered = false;
                 }

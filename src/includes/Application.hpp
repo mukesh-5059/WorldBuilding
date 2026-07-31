@@ -35,6 +35,7 @@ protected:
 
     float inspectorWidth;
     float consoleHeight;
+    bool show3DViewportTab = true;
 
     void performanceGui();
     void renderResolutionGui();
