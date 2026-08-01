@@ -7,7 +7,8 @@
 enum class LogLevel {
     Info,
     Warning,
-    Error
+    Error,
+    Performance
 };
 
 struct LogEntry {
@@ -25,12 +26,14 @@ private:
     bool showInfo;
     bool showWarning;
     bool showError;
+    bool showPerformance;
     bool isCollapsed;
     float height;
 
     int infoCount;
     int warningCount;
     int errorCount;
+    int performanceCount;
 
 public:
     ConsoleLog();

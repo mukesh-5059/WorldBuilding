@@ -75,5 +75,5 @@ void Builder::EvaluateTectonicBoundaryCollisions() {
 
     auto tEndCollision = std::chrono::high_resolution_clock::now();
     double msCollision = std::chrono::duration<double, std::milli>(tEndCollision - tStartCollision).count();
-    ConsoleLog::Get().AddLog(LogLevel::Info, "[Perf] Collision & Stress Calculation: %.2f ms", msCollision);
+    ConsoleLog::Get().AddLog(LogLevel::Performance, "[Perf] Collision & Stress Calculation: %.2f ms", msCollision);
 }

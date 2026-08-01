@@ -155,7 +155,7 @@ void Builder::RenderPointsToEquirectangularTexture() {
 
     auto tEndTex = std::chrono::high_resolution_clock::now();
     double msTex = std::chrono::duration<double, std::milli>(tEndTex - tStartTex).count();
-    ConsoleLog::Get().AddLog(LogLevel::Info, "[Perf] Texture Rendering: %.2f ms", msTex);
+    ConsoleLog::Get().AddLog(LogLevel::Performance, "[Perf] Texture Rendering: %.2f ms", msTex);
 
     if (textureLoaded) {
         UpdateTexture(texture, textureImage.data);

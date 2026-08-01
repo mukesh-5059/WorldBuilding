@@ -39,7 +39,7 @@ void Builder::RunTectonicPlateAssignment() {
 
     auto tEndVel = std::chrono::high_resolution_clock::now();
     double msVel = std::chrono::duration<double, std::milli>(tEndVel - tStartVel).count();
-    ConsoleLog::Get().AddLog(LogLevel::Info, "[Perf] Plate Velocity Assignment: %.2f ms", msVel);
+    ConsoleLog::Get().AddLog(LogLevel::Performance, "[Perf] Plate Velocity Assignment: %.2f ms", msVel);
 
     auto tStartPlate = std::chrono::high_resolution_clock::now();
 
@@ -126,7 +126,7 @@ void Builder::RunTectonicPlateAssignment() {
 
     auto tEndPlate = std::chrono::high_resolution_clock::now();
     double msPlate = std::chrono::duration<double, std::milli>(tEndPlate - tStartPlate).count();
-    ConsoleLog::Get().AddLog(LogLevel::Info, "[Perf] Plate Assignment: %.2f ms", msPlate);
+    ConsoleLog::Get().AddLog(LogLevel::Performance, "[Perf] Plate Assignment: %.2f ms", msPlate);
 
     // FastNoise 3D Continental Landmass Generation
     auto tStartNoise = std::chrono::high_resolution_clock::now();
@@ -164,7 +164,7 @@ void Builder::RunTectonicPlateAssignment() {
 
     auto tEndNoise = std::chrono::high_resolution_clock::now();
     double msNoise = std::chrono::duration<double, std::milli>(tEndNoise - tStartNoise).count();
-    ConsoleLog::Get().AddLog(LogLevel::Info, "[Perf] 3D Noise Generation: %.2f ms", msNoise);
+    ConsoleLog::Get().AddLog(LogLevel::Performance, "[Perf] 3D Noise Generation: %.2f ms", msNoise);
 
     cellPlateDist = dist;
 }

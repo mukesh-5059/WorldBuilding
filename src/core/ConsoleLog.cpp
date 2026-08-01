@@ -5,8 +5,8 @@
 #include <ctime>
 
 ConsoleLog::ConsoleLog()
-    : autoScroll(true), showInfo(true), showWarning(true), showError(true),
-      isCollapsed(false), height(180.0f), infoCount(0), warningCount(0), errorCount(0) {
+    : autoScroll(true), showInfo(true), showWarning(true), showError(true), showPerformance(true),
+      isCollapsed(false), height(180.0f), infoCount(0), warningCount(0), errorCount(0), performanceCount(0) {
     filterBuffer[0] = '\0';
 }
 
@@ -37,6 +37,7 @@ void ConsoleLog::AddLog(LogLevel level, const char* fmt, ...) {
     if (level == LogLevel::Info) infoCount++;
     else if (level == LogLevel::Warning) warningCount++;
     else if (level == LogLevel::Error) errorCount++;
+    else if (level == LogLevel::Performance) performanceCount++;
 }
 
 void ConsoleLog::Clear() {
@@ -45,6 +46,7 @@ void ConsoleLog::Clear() {
     infoCount = 0;
     warningCount = 0;
     errorCount = 0;
+    performanceCount = 0;
 }
 
 void ConsoleLog::Draw(const char* title) {
@@ -60,8 +62,8 @@ void ConsoleLog::Draw(const char* title) {
 
     ImGui::TextUnformatted(title);
     ImGui::SameLine();
-    ImGui::TextDisabled("(%d logs | %d info, %d warn, %d err)",
-                        (int)entries.size(), infoCount, warningCount, errorCount);
+    ImGui::TextDisabled("(%d logs | %d info, %d warn, %d err, %d perf)",
+                        (int)entries.size(), infoCount, warningCount, errorCount, performanceCount);
 
     if (!isCollapsed) {
         ImGui::SameLine();
@@ -74,6 +76,7 @@ void ConsoleLog::Draw(const char* title) {
             infoCount = 0;
             warningCount = 0;
             errorCount = 0;
+            performanceCount = 0;
         }
 
         ImGui::SameLine();
@@ -85,6 +88,8 @@ void ConsoleLog::Draw(const char* title) {
         ImGui::Checkbox("Warn", &showWarning);
         ImGui::SameLine();
         ImGui::Checkbox("Err", &showError);
+        ImGui::SameLine();
+        ImGui::Checkbox("Perf", &showPerformance);
 
         ImGui::Separator();
 
@@ -95,6 +100,7 @@ void ConsoleLog::Draw(const char* title) {
             if (item.level == LogLevel::Info && !showInfo) continue;
             if (item.level == LogLevel::Warning && !showWarning) continue;
             if (item.level == LogLevel::Error && !showError) continue;
+            if (item.level == LogLevel::Performance && !showPerformance) continue;
 
             if (filterBuffer[0] != '\0') {
                 if (item.message.find(filterBuffer) == std::string::npos &&
@@ -111,6 +117,9 @@ void ConsoleLog::Draw(const char* title) {
             } else if (item.level == LogLevel::Error) {
                 color = ImVec4(1.0f, 0.35f, 0.35f, 1.0f);
                 levelTag = "[ERR ]";
+            } else if (item.level == LogLevel::Performance) {
+                color = ImVec4(0.2f, 0.9f, 0.9f, 1.0f);
+                levelTag = "[PERF]";
             }
 
             ImGui::TextDisabled("[%s]", item.timestamp.c_str());
