@@ -111,10 +111,11 @@ Color GetPlateColor(PlateType type) {
     else return Color{ 45, 185, 45, 255 }; //Vibrant Green
 }
 
-float HashCell3D(Vector3 p) {
-    unsigned int x = (unsigned int)(p.x * 73856093.0f);
-    unsigned int y = (unsigned int)(p.y * 19349663.0f);
-    unsigned int z = (unsigned int)(p.z * 83492791.0f);
+float HashCell3D(Vector3 p, int seed) {
+    unsigned int s = (unsigned int)seed * 19283741U;
+    unsigned int x = (unsigned int)(p.x * 73856093.0f) ^ s;
+    unsigned int y = (unsigned int)(p.y * 19349663.0f) ^ (s * 31U);
+    unsigned int z = (unsigned int)(p.z * 83492791.0f) ^ (s * 57U);
     unsigned int n = x ^ (y * 31u) ^ (z * 57u);
     n = (n << 13U) ^ n;
     n = n * (n * n * 15731U + 789221U) + 1376312589U;

@@ -51,7 +51,7 @@ void PolarToEquirectangularPixel(float lonRad, float latRad, int texWidth, int t
 
 Color GetPlateColor(PlateType type);
 
-float HashCell3D(Vector3 p);
+float HashCell3D(Vector3 p, int seed = 0);
 
 Vector3 GetCell3DVector(int cellIndex, int N);
 

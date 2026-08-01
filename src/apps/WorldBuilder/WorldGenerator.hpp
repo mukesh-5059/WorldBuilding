@@ -26,8 +26,11 @@ public:
     float seaLevel = 0.35f;            // Sea level threshold for land/water cutoff (0.0 to 1.0)
     float plateSizeVariance = 0.50f;   // Variance in plate expansion speeds (0.0 to 1.0)
 
+    // Seed & Control Parameters
+    int worldSeed = 42;                // Common seed (0 to 1000) for both spatial HashCell3D & FastNoiseLite
+
     // Noise Parameters
-    int noiseSeed = 1337;
+    int noiseSeed = 42;
     int noiseType = 0;           // 0: OpenSimplex2, 1: OpenSimplex2S, 2: Cellular, 3: Perlin, 4: ValueCubic, 5: Value
     int noiseFractalType = 1;    // 0: None, 1: FBm, 2: Ridged, 3: PingPong
     float noiseFrequency = 2.5f;

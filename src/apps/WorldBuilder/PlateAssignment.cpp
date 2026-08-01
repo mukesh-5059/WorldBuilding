@@ -23,16 +23,16 @@ void Builder::RunTectonicPlateAssignment() {
         Color pCol = GetPlateColor(pType);
 
         // Calculate random growth step weight for plate size diversity
-        float hBias = HashCell3D(Vector3{ (float)p, 9.87f, 6.54f });
+        float hBias = HashCell3D(Vector3{ (float)p, 9.87f, 6.54f }, worldSeed);
         float gBias = 1.0f + (hBias * 2.0f - 1.0f) * plateSizeVariance;
         if (gBias < 0.2f) gBias = 0.2f;
 
         // Calculate 3D Euler Rotation Pole and Angular Speed for tectonic plate kinematics
-        float eh1 = HashCell3D(Vector3{ (float)p, 5.43f, 2.10f }) * 2.0f - 1.0f;
-        float eh2 = HashCell3D(Vector3{ 1.09f, (float)p, 8.76f }) * (2.0f * PI);
+        float eh1 = HashCell3D(Vector3{ (float)p, 5.43f, 2.10f }, worldSeed) * 2.0f - 1.0f;
+        float eh2 = HashCell3D(Vector3{ 1.09f, (float)p, 8.76f }, worldSeed) * (2.0f * PI);
         float er = sqrtf(1.0f - eh1 * eh1);
         Vector3 ePole = Vector3Normalize(Vector3{ er * cosf(eh2), eh1, er * sinf(eh2) });
-        float aSpeed = 0.02f + HashCell3D(Vector3{ (float)p, 3.33f, 7.77f }) * 0.06f;
+        float aSpeed = 0.02f + HashCell3D(Vector3{ (float)p, 3.33f, 7.77f }, worldSeed) * 0.06f;
 
         plates.push_back(TectonicPlate{ p, pType, pCol, gBias, ePole, aSpeed });
     }
@@ -52,8 +52,8 @@ void Builder::RunTectonicPlateAssignment() {
 
     // Pick seeds using random 3D direction vectors on the unit sphere
     for (int p = 0; p < numPlates; ++p) {
-        float h1 = HashCell3D(Vector3{ (float)p, 1.23f, 4.56f }) * 2.0f - 1.0f;
-        float h2 = HashCell3D(Vector3{ 7.89f, (float)p, 0.12f }) * (2.0f * PI);
+        float h1 = HashCell3D(Vector3{ (float)p, 1.23f, 4.56f }, worldSeed) * 2.0f - 1.0f;
+        float h2 = HashCell3D(Vector3{ 7.89f, (float)p, 0.12f }, worldSeed) * (2.0f * PI);
         float r = sqrtf(1.0f - h1 * h1);
         Vector3 seedDir = Vector3{ r * cosf(h2), h1, r * sinf(h2) };
 
@@ -110,7 +110,7 @@ void Builder::RunTectonicPlateAssignment() {
             int nIdx = GetCubemapNeighborCellIndex(face, i, j, dir, N);
             if (nIdx >= 0 && nIdx < totalCells) {
                 Vector3 nPos = cell3DVectorMap[nIdx];
-                float stepNoise = (0.85f + HashCell3D(nPos) * borderJitterStrength) * pBias;
+                float stepNoise = (0.85f + HashCell3D(nPos, worldSeed) * borderJitterStrength) * pBias;
                 float newDist = current.dist + stepNoise;
 
                 if (newDist < dist[nIdx]) {
@@ -132,7 +132,7 @@ void Builder::RunTectonicPlateAssignment() {
     auto tStartNoise = std::chrono::high_resolution_clock::now();
 
     FastNoiseLite noise;
-    noise.SetSeed(noiseSeed);
+    noise.SetSeed(worldSeed);
     noise.SetNoiseType((FastNoiseLite::NoiseType)noiseType);
     noise.SetFractalType((FastNoiseLite::FractalType)noiseFractalType);
     noise.SetFractalOctaves(noiseOctaves);

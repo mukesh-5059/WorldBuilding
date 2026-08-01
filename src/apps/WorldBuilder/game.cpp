@@ -257,7 +257,10 @@ void WorldBuilder::DrawUI() {
             noiseChanged = true;
         }
 
-        if (ImGui::DragInt("Noise Seed", &plotter.noiseSeed, 1.0f, 0, 999999)) noiseChanged = true;
+        if (ImGui::SliderInt("World Seed", &plotter.worldSeed, 0, 1000)) {
+            plotter.noiseSeed = plotter.worldSeed;
+            noiseChanged = true;
+        }
 
         const char* noiseTypeNames[] = { "OpenSimplex2", "OpenSimplex2S", "Cellular", "Perlin", "ValueCubic", "Value" };
         if (ImGui::Combo("Noise Type", &plotter.noiseType, noiseTypeNames, IM_ARRAYSIZE(noiseTypeNames))) noiseChanged = true;
