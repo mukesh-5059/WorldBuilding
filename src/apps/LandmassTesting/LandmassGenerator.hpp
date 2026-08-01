@@ -8,7 +8,6 @@
 constexpr float NOISE_GAIN = 0.4f;       // Constant gain/persistence
 constexpr float NOISE_LACUNARITY = 2.1f; // Constant lacunarity
 constexpr FastNoiseLite::NoiseType HARDCODED_NOISE_TYPE = FastNoiseLite::NoiseType_OpenSimplex2;
-constexpr FastNoiseLite::FractalType HARDCODED_FRACTAL_TYPE = FastNoiseLite::FractalType_Ridged;
 constexpr int HARDCODED_OCTAVES = 4;
 
 // Hardcoded Shape Refinement constant parameters
@@ -59,27 +58,28 @@ struct PQElement {
 struct LandmassConfig {
     int mapWidth = 256;
     int mapHeight = 256;
-    int seed = 328; // User default starting seed
+    int seed = 8744; // Default starting seed from user settings
 
     // Step 2 & 3: Tectonic Plate & SDF Settings
-    int numPlates = 8;               // Number of random plate seeds
+    int numPlates = 16;              // Number of random plate seeds
     float plateSizeVariance = 0.60f; // Random growth step bias variance per plate
     float landRatio = 0.45f;         // Ratio of Continental vs Oceanic plates (0.0 to 1.0)
-    float maxSDFDepth = 35.0f;       // Max SDF distance for green gradient normalization
+    float maxSDFDepth = 30.1f;       // Max SDF distance for green gradient normalization
 
     // Step 4: Landmass Seed Placement Settings
-    float minInteriorSDF = 2.0f;     // Min SDF depth to place landmass seed
-    float seedSpacing = 16.0f;       // Poisson-disk spacing between seeds (cells)
-    float radiusScale = 0.85f;       // Adaptive radius scale multiplier
+    float minInteriorSDF = 9.0f;     // Min SDF depth to place landmass seed
+    float seedSpacing = 12.2f;       // Poisson-disk spacing between seeds (cells)
+    float radiusScale = 1.22f;       // Adaptive radius scale multiplier
+    float concentrationPower = 3.46f; // SDF bias exponent for concentrating seeds in continental middle
 
-    bool drawSeedPoints = true;      // Highlight plate seed cells with white cross markers
-    bool drawBoundaries = true;      // Highlight continental coastline boundary cells with bright yellow
+    bool drawSeedPoints = false;      // Highlight plate seed cells with white cross markers
+    bool drawBoundaries = false;      // Highlight continental coastline boundary cells with bright yellow
     bool drawPlateBoundaries = false;// Highlight all inter-plate boundaries with orange/red
-    bool drawSDFColors = true;       // Render SDF Green gradient for land & Blue for oceans
-    bool drawLandmassSeeds = true;   // Highlight adaptive landmass seed points with magenta circles
+    bool drawSDFColors = false;       // Render SDF Green gradient for land & Blue for oceans
+    bool drawLandmassSeeds = false;   // Highlight adaptive landmass seed points with magenta circles
 
     // Coastline & Water Settings
-    float waterLevel = 0.146f;
+    float waterLevel = 0.050f;
     float coastLineWidth = 0.015f;
 
     // Multi-Seed Falloff Mask Settings
@@ -89,9 +89,10 @@ struct LandmassConfig {
     float seedSpread = 0.84f;
     float seedMinRadius = 0.28f;
     float seedMaxRadius = 0.70f;
-    float falloffPower = 1.41f;
+    float falloffPower = 1.50f;
 
     // FastNoise Lite Controls
+    FastNoiseLite::FractalType fractalType = FastNoiseLite::FractalType_FBm; // Default FBm
     float frequency = 1.50f;
     float details = 10.88f;
 };
@@ -152,4 +153,5 @@ public:
     float CalculateMultiSeedMask(float nx, float ny, const std::vector<SeedPoint>& seeds);
     Image GenerateCoastlineImage();
     Image GenerateHeightmapImage();
+    Image GenerateRawNoiseImage();
 };

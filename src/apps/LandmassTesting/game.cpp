@@ -33,9 +33,17 @@ Texture2D LandmassTesting::ReloadHeightmapCallback() {
     return tex;
 }
 
+Texture2D LandmassTesting::ReloadRawNoiseCallback() {
+    Image img = generator.GenerateRawNoiseImage();
+    Texture2D tex = LoadTextureFromImage(img);
+    UnloadImage(img);
+    return tex;
+}
+
 void LandmassTesting::TriggerViewportReloads() {
     ReloadTextureViewport(coastlineViewportId);
     ReloadTextureViewport(heightmapViewportId);
+    ReloadTextureViewport(rawNoiseViewportId);
 }
 
 void LandmassTesting::Init() {
@@ -53,6 +61,10 @@ void LandmassTesting::Init() {
     heightmapTexture = LoadTextureFromImage(coastImg);
     UnloadImage(coastImg);
 
+    Image rawNoiseImg = generator.GenerateRawNoiseImage();
+    rawNoiseTexture = LoadTextureFromImage(rawNoiseImg);
+    UnloadImage(rawNoiseImg);
+
     coastlineViewportId = AddTextureViewport(coastlineTexture, "Continental SDF & Landmass Seeds (2D)", [this]() {
         return ReloadCoastlineCallback();
     }, true);
@@ -61,8 +73,12 @@ void LandmassTesting::Init() {
         return ReloadHeightmapCallback();
     }, true);
 
+    rawNoiseViewportId = AddTextureViewport(rawNoiseTexture, "Generated FastNoise (2D)", [this]() {
+        return ReloadRawNoiseCallback();
+    }, true);
+
     ConsoleLog::Get().AddLog(LogLevel::Info, "Continental Landmass Engine initialized.");
-    ConsoleLog::Get().AddLog(LogLevel::Info, "Registered Continental SDF Seeds and Coastline Raylib Texture2D viewports.");
+    ConsoleLog::Get().AddLog(LogLevel::Info, "Registered Continental SDF Seeds, Coastline, and FastNoise Raylib Viewports.");
 }
 
 void LandmassTesting::Update(float deltaTime) {
@@ -131,6 +147,7 @@ void LandmassTesting::DrawUI() {
 
     // 3. Adaptive Continental Landmass Seed Spreading
     if (ImGui::CollapsingHeader("Adaptive Landmass Seed Spreading", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (ImGui::SliderFloat("Center Concentration (Power)", &config.concentrationPower, 0.1f, 5.0f, "%.2f")) changed = true;
         if (ImGui::SliderFloat("Min Interior Seed SDF", &config.minInteriorSDF, 1.0f, 20.0f, "%.1f cells")) changed = true;
         if (ImGui::SliderFloat("Landmass Seed Spacing", &config.seedSpacing, 5.0f, 50.0f, "%.1f cells")) changed = true;
         if (ImGui::SliderFloat("Adaptive Radius Scale", &config.radiusScale, 0.20f, 2.00f, "%.2f")) changed = true;
@@ -163,6 +180,21 @@ void LandmassTesting::DrawUI() {
 
     // 5. FastNoise Lite Generator Controls
     if (ImGui::CollapsingHeader("FastNoise Controls", ImGuiTreeNodeFlags_DefaultOpen)) {
+        const char* fractalItems[] = { "None", "FBm", "Ridged", "PingPong" };
+        int currentFractal = 2;
+        if (config.fractalType == FastNoiseLite::FractalType_None) currentFractal = 0;
+        else if (config.fractalType == FastNoiseLite::FractalType_FBm) currentFractal = 1;
+        else if (config.fractalType == FastNoiseLite::FractalType_Ridged) currentFractal = 2;
+        else if (config.fractalType == FastNoiseLite::FractalType_PingPong) currentFractal = 3;
+
+        if (ImGui::Combo("Fractal Type", &currentFractal, fractalItems, IM_ARRAYSIZE(fractalItems))) {
+            if (currentFractal == 0) config.fractalType = FastNoiseLite::FractalType_None;
+            else if (currentFractal == 1) config.fractalType = FastNoiseLite::FractalType_FBm;
+            else if (currentFractal == 2) config.fractalType = FastNoiseLite::FractalType_Ridged;
+            else if (currentFractal == 3) config.fractalType = FastNoiseLite::FractalType_PingPong;
+            changed = true;
+        }
+
         if (ImGui::SliderFloat("Frequency (Grid-Invariant)", &config.frequency, 0.5f, 15.0f, "%.2f")) changed = true;
         if (ImGui::SliderFloat("Details", &config.details, 0.1f, 15.0f, "%.2f")) changed = true;
     }
