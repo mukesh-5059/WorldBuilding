@@ -1,6 +1,8 @@
 #include "WorldGenerator.hpp"
+#include "ConsoleLog.hpp"
 #include <cmath>
 #include <vector>
+#include <chrono>
 
 Builder::Builder() {
     textureLoaded = false;
@@ -44,6 +46,26 @@ static int GetCellIdAtPixel(int px, int py, int texWidth, int texHeight, int cub
     return face * cubemapFaceRes * cubemapFaceRes + i * cubemapFaceRes + j;
 }
 
+void Builder::PrecomputePixelToCellMap() {
+    if ((int)pixelToCellMap.size() == texWidth * texHeight &&
+        cachedTexWidth == texWidth &&
+        cachedTexHeight == texHeight &&
+        cachedCubemapFaceRes == cubemapFaceRes) {
+        return; // Cache hit
+    }
+
+    pixelToCellMap.resize(texWidth * texHeight);
+    cachedTexWidth = texWidth;
+    cachedTexHeight = texHeight;
+    cachedCubemapFaceRes = cubemapFaceRes;
+
+    for (int py = 0; py < texHeight; ++py) {
+        for (int px = 0; px < texWidth; ++px) {
+            pixelToCellMap[py * texWidth + px] = GetCellIdAtPixel(px, py, texWidth, texHeight, cubemapFaceRes);
+        }
+    }
+}
+
 void Builder::Rebuild(int faceRes, float radius, int tWidth, int tHeight) {
     Unload();
 
@@ -65,6 +87,10 @@ void Builder::Rebuild(int faceRes, float radius, int tWidth, int tHeight) {
 void Builder::RenderPointsToEquirectangularTexture() {
     if (!textureImage.data || cellPlateOwner.empty()) return;
 
+    auto tStartTex = std::chrono::high_resolution_clock::now();
+
+    PrecomputePixelToCellMap();
+
     Color* pixels = (Color*)textureImage.data;
     Color boundaryColor     = Color{ 20, 20, 30, 255 };
     Color defaultLandColor  = Color{ 46, 139, 87, 255 };   // Land Green
@@ -73,7 +99,7 @@ void Builder::RenderPointsToEquirectangularTexture() {
 
     for (int py = 0; py < texHeight; ++py) {
         for (int px = 0; px < texWidth; ++px) {
-            int cellId = GetCellIdAtPixel(px, py, texWidth, texHeight, cubemapFaceRes);
+            int cellId = pixelToCellMap[py * texWidth + px];
             int ownerPlate = (cellId >= 0 && cellId < (int)cellPlateOwner.size()) ? cellPlateOwner[cellId] : 0;
             bool isLand = (cellId >= 0 && cellId < (int)cellIsLand.size()) ? cellIsLand[cellId] : false;
             bool isSeed = (cellId >= 0 && cellId < (int)cellIsSeed.size()) ? cellIsSeed[cellId] : false;
@@ -94,7 +120,7 @@ void Builder::RenderPointsToEquirectangularTexture() {
                         int checkPy = py + dy;
                         if (checkPy < 0 || checkPy >= texHeight) continue;
 
-                        int checkCell = GetCellIdAtPixel(checkPx, checkPy, texWidth, texHeight, cubemapFaceRes);
+                        int checkCell = pixelToCellMap[checkPy * texWidth + checkPx];
                         if (cellPlateOwner[checkCell] != ownerPlate) {
                             isBorder = true;
                             // Pick cell ID of boundary cell that has a valid boundary type
@@ -126,6 +152,10 @@ void Builder::RenderPointsToEquirectangularTexture() {
             pixels[py * texWidth + px] = pixelColor;
         }
     }
+
+    auto tEndTex = std::chrono::high_resolution_clock::now();
+    double msTex = std::chrono::duration<double, std::milli>(tEndTex - tStartTex).count();
+    ConsoleLog::Get().AddLog(LogLevel::Info, "[Perf] Texture Rendering: %.2f ms", msTex);
 
     if (textureLoaded) {
         UpdateTexture(texture, textureImage.data);

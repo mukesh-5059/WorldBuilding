@@ -65,9 +65,15 @@ public:
     std::vector<float> cellCompressionRate;
     std::vector<BoundaryCellData> boundaryCells;
 
+    std::vector<int> pixelToCellMap;
+    int cachedTexWidth = 0;
+    int cachedTexHeight = 0;
+    int cachedCubemapFaceRes = 0;
+
     Image textureImage;
     Texture2D texture;
 
+    void PrecomputePixelToCellMap();
     void Rebuild(int faceRes, float radius, int tWidth = 2048, int tHeight = 1024);
     void RunTectonicPlateAssignment();
     void EvaluateTectonicBoundaryCollisions();

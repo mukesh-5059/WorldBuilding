@@ -2,27 +2,25 @@
 #include "utils.hpp"
 #include "fastnoise/FaseNoise.h"
 #include "raylib/raymath.h"
+#include "ConsoleLog.hpp"
 
 #include <cmath>
 #include <queue>
-
-
-
+#include <chrono>
 
 void Builder::RunTectonicPlateAssignment() {
     int N = cubemapFaceRes;
     int totalCells = 6 * N * N;
     if (totalCells <= 0) return;
 
-
     plates.clear();
     plates.reserve(numPlates);
 
+    auto tStartVel = std::chrono::high_resolution_clock::now();
 
     for (int p = 0; p < numPlates; ++p) {
         PlateType pType = (((float)p < (float)landToWaterRatio * numPlates / 10.0f)) ? PlateType::CONTINENTAL : PlateType::OCEANIC;
         Color pCol = GetPlateColor(pType);
-
 
         // Calculate random growth step weight for plate size diversity
         float hBias = HashCell3D(Vector3{ (float)p, 9.87f, 6.54f });
@@ -39,15 +37,18 @@ void Builder::RunTectonicPlateAssignment() {
         plates.push_back(TectonicPlate{ p, pType, pCol, gBias, ePole, aSpeed });
     }
 
+    auto tEndVel = std::chrono::high_resolution_clock::now();
+    double msVel = std::chrono::duration<double, std::milli>(tEndVel - tStartVel).count();
+    ConsoleLog::Get().AddLog(LogLevel::Info, "[Perf] Plate Velocity Assignment: %.2f ms", msVel);
+
+    auto tStartPlate = std::chrono::high_resolution_clock::now();
 
     cellPlateOwner.assign(totalCells, -1);
     cellIsLand.assign(totalCells, false);
     cellIsSeed.assign(totalCells, false);
     std::vector<float> dist(totalCells, 1e9f);
 
-
     std::priority_queue<PQElement, std::vector<PQElement>, std::greater<PQElement>> pq;
-
 
     // Pick seeds using random 3D direction vectors on the unit sphere
     for (int p = 0; p < numPlates; ++p) {
@@ -55,7 +56,6 @@ void Builder::RunTectonicPlateAssignment() {
         float h2 = HashCell3D(Vector3{ 7.89f, (float)p, 0.12f }) * (2.0f * PI);
         float r = sqrtf(1.0f - h1 * h1);
         Vector3 seedDir = Vector3{ r * cosf(h2), h1, r * sinf(h2) };
-
 
         // Find cell ID for seedDir
         float ax = fabsf(seedDir.x), ay = fabsf(seedDir.y), az = fabsf(seedDir.z);
@@ -75,12 +75,10 @@ void Builder::RunTectonicPlateAssignment() {
         if (i < 0) i = 0; if (i >= N) i = N - 1;
         if (j < 0) j = 0; if (j >= N) j = N - 1;
 
-
         int seedCell = face * N * N + i * N + j;
         dist[seedCell] = 0.0f;
         cellPlateOwner[seedCell] = p;
         cellIsSeed[seedCell] = true;
-
 
         // Expand seed marker to 4 direct neighbors so red dots are clearly visible on high-res textures
         for (int dir = 0; dir < 4; ++dir) {
@@ -90,10 +88,8 @@ void Builder::RunTectonicPlateAssignment() {
             }
         }
 
-
         pq.push(PQElement{ 0.0f, seedCell, p });
     }
-
 
     // Seamless 3D Jittered Priority Propagation with Plate Expansion Weighting
     maxPlateDist.assign(numPlates, 0.001f);
@@ -101,18 +97,14 @@ void Builder::RunTectonicPlateAssignment() {
         PQElement current = pq.top();
         pq.pop();
 
-
         if (current.dist > dist[current.cellIndex]) continue;
-
 
         int face = current.cellIndex / (N * N);
         int rem = current.cellIndex % (N * N);
         int i = rem / N;
         int j = rem % N;
 
-
         float pBias = plates[current.plateId].growthBias;
-
 
         for (int dir = 0; dir < 4; ++dir) {
             int nIdx = GetCubemapNeighborCellIndex(face, i, j, dir, N);
@@ -120,7 +112,6 @@ void Builder::RunTectonicPlateAssignment() {
                 Vector3 nPos = GetCell3DVector(nIdx, N);
                 float stepNoise = (0.85f + HashCell3D(nPos) * borderJitterStrength) * pBias;
                 float newDist = current.dist + stepNoise;
-
 
                 if (newDist < dist[nIdx]) {
                     if (newDist > maxPlateDist[current.plateId])
@@ -133,7 +124,13 @@ void Builder::RunTectonicPlateAssignment() {
         }
     }
 
+    auto tEndPlate = std::chrono::high_resolution_clock::now();
+    double msPlate = std::chrono::duration<double, std::milli>(tEndPlate - tStartPlate).count();
+    ConsoleLog::Get().AddLog(LogLevel::Info, "[Perf] Plate Assignment: %.2f ms", msPlate);
+
     // FastNoise 3D Continental Landmass Generation
+    auto tStartNoise = std::chrono::high_resolution_clock::now();
+
     FastNoiseLite noise;
     noise.SetSeed(noiseSeed);
     noise.SetNoiseType((FastNoiseLite::NoiseType)noiseType);
@@ -165,6 +162,9 @@ void Builder::RunTectonicPlateAssignment() {
         }
     }
 
+    auto tEndNoise = std::chrono::high_resolution_clock::now();
+    double msNoise = std::chrono::duration<double, std::milli>(tEndNoise - tStartNoise).count();
+    ConsoleLog::Get().AddLog(LogLevel::Info, "[Perf] 3D Noise Generation: %.2f ms", msNoise);
 
     cellPlateDist = dist;
 }

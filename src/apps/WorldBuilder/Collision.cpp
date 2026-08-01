@@ -1,12 +1,16 @@
 #include "WorldGenerator.hpp"
 #include "utils.hpp"
 #include "raylib/raymath.h"
+#include "ConsoleLog.hpp"
 #include <vector>
+#include <chrono>
 
 void Builder::EvaluateTectonicBoundaryCollisions() {
     int N = cubemapFaceRes;
     int totalCells = 6 * N * N;
     if (totalCells <= 0 || cellPlateOwner.empty() || plates.empty()) return;
+
+    auto tStartCollision = std::chrono::high_resolution_clock::now();
 
     cellBoundaryType.assign(totalCells, BoundaryType::NONE);
     cellCompressionRate.assign(totalCells, 0.0f);
@@ -68,4 +72,8 @@ void Builder::EvaluateTectonicBoundaryCollisions() {
             }
         }
     }
+
+    auto tEndCollision = std::chrono::high_resolution_clock::now();
+    double msCollision = std::chrono::duration<double, std::milli>(tEndCollision - tStartCollision).count();
+    ConsoleLog::Get().AddLog(LogLevel::Info, "[Perf] Collision & Stress Calculation: %.2f ms", msCollision);
 }
