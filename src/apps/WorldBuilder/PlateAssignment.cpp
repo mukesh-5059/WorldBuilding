@@ -109,7 +109,7 @@ void Builder::RunTectonicPlateAssignment() {
         for (int dir = 0; dir < 4; ++dir) {
             int nIdx = GetCubemapNeighborCellIndex(face, i, j, dir, N);
             if (nIdx >= 0 && nIdx < totalCells) {
-                Vector3 nPos = GetCell3DVector(nIdx, N);
+                Vector3 nPos = cell3DVectorMap[nIdx];
                 float stepNoise = (0.85f + HashCell3D(nPos) * borderJitterStrength) * pBias;
                 float newDist = current.dist + stepNoise;
 
@@ -146,7 +146,7 @@ void Builder::RunTectonicPlateAssignment() {
         int p = cellPlateOwner[c];
         if (p >= 0 && p < numPlates) {
             if (plates[p].type == PlateType::CONTINENTAL) {
-                Vector3 pos = GetCell3DVector(c, N);
+                Vector3 pos = cell3DVectorMap[c];
                 // Sample 3D noise
                 float noiseVal = noise.GetNoise(pos.x, pos.y, pos.z); // [-1.0, 1.0]
 

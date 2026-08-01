@@ -15,6 +15,22 @@ struct TectonicPlate {
     float angularSpeed;// Angular rotation speed magnitude
 };
 
+enum class BoundaryType {
+    NONE = 0,
+    CONVERGENT = 1, // Plates colliding (Red: Mountains / Trenches)
+    DIVERGENT = 2,  // Plates rifting apart (Cyan: Ocean Ridges / Rift Valleys)
+    TRANSFORM = 3   // Plates sliding past each other (Orange: Fault lines)
+};
+
+struct BoundaryCellData {
+    int cellIndex;
+    int plateA;
+    int plateB;
+    BoundaryType type;
+    float compressionRate; // Negative = Convergent, Positive = Divergent
+    Vector3 relativeVel;   // Relative 3D velocity vector
+};
+
 struct PQElement {
     float dist;
     int cellIndex;

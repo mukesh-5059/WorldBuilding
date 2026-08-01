@@ -32,6 +32,27 @@ void Builder::PrecomputePixelToCellMap() {
     }
 }
 
+void Builder::PrecomputeCell3DVectors() {
+    int totalCells = 6 * cubemapFaceRes * cubemapFaceRes;
+    if ((int)cell3DVectorMap.size() == totalCells && cachedCellVectorFaceRes == cubemapFaceRes) {
+        return; // Cache hit
+    }
+
+    cell3DVectorMap.resize(totalCells);
+    cachedCellVectorFaceRes = cubemapFaceRes;
+
+    for (int c = 0; c < totalCells; ++c) {
+        cell3DVectorMap[c] = GetCell3DVector(c, cubemapFaceRes);
+    }
+}
+
+Vector3 Builder::GetCell3DVectorCached(int cellIndex) const {
+    if (cellIndex >= 0 && cellIndex < (int)cell3DVectorMap.size()) {
+        return cell3DVectorMap[cellIndex];
+    }
+    return GetCell3DVector(cellIndex, cubemapFaceRes);
+}
+
 void Builder::Rebuild(int faceRes, float radius, int tWidth, int tHeight) {
     Unload();
 
@@ -39,6 +60,8 @@ void Builder::Rebuild(int faceRes, float radius, int tWidth, int tHeight) {
     planetRadius = radius;
     texWidth = tWidth;
     texHeight = tHeight;
+
+    PrecomputeCell3DVectors();
 
     RunTectonicPlateAssignment();
     EvaluateTectonicBoundaryCollisions();

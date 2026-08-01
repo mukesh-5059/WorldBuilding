@@ -2,22 +2,6 @@
 #include "utils.hpp"
 #include <vector>
 
-enum class BoundaryType {
-    NONE = 0,
-    CONVERGENT = 1, // Plates colliding (Red: Mountains / Trenches)
-    DIVERGENT = 2,  // Plates rifting apart (Cyan: Ocean Ridges / Rift Valleys)
-    TRANSFORM = 3   // Plates sliding past each other (Orange: Fault lines)
-};
-
-struct BoundaryCellData {
-    int cellIndex;
-    int plateA;
-    int plateB;
-    BoundaryType type;
-    float compressionRate; // Negative = Convergent, Positive = Divergent
-    Vector3 relativeVel;   // Relative 3D velocity vector
-};
-
 class Builder {
 public:
     Builder();
@@ -70,10 +54,15 @@ public:
     int cachedTexHeight = 0;
     int cachedCubemapFaceRes = 0;
 
+    std::vector<Vector3> cell3DVectorMap;
+    int cachedCellVectorFaceRes = 0;
+
     Image textureImage;
     Texture2D texture;
 
     void PrecomputePixelToCellMap();
+    void PrecomputeCell3DVectors();
+    Vector3 GetCell3DVectorCached(int cellIndex) const;
     void Rebuild(int faceRes, float radius, int tWidth = 2048, int tHeight = 1024);
     void RunTectonicPlateAssignment();
     void EvaluateTectonicBoundaryCollisions();

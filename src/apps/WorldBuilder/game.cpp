@@ -118,7 +118,7 @@ void WorldBuilder::SceneDraw() {
             }
 
             if (seedCell >= 0) {
-                Vector3 seedDir = GetCell3DVector(seedCell, N);
+                Vector3 seedDir = plotter.GetCell3DVectorCached(seedCell);
                 Vector3 seedPos = Vector3Scale(seedDir, radius * 1.02f);
                 // Correct direction: seedDir x eulerPole (flipped cross product order)
                 Vector3 rotVel = Vector3CrossProduct(seedDir, Vector3Scale(selPlate.eulerPole, selPlate.angularSpeed));

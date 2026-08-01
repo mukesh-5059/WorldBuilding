@@ -25,7 +25,7 @@ void Builder::EvaluateTectonicBoundaryCollisions() {
         int i = rem / N;
         int j = rem % N;
 
-        Vector3 posA = GetCell3DVector(c, N);
+        Vector3 posA = cell3DVectorMap[c];
         const auto& pA = plates[plateA];
         Vector3 vA = Vector3CrossProduct(posA, Vector3Scale(pA.eulerPole, pA.angularSpeed));
 
@@ -35,7 +35,7 @@ void Builder::EvaluateTectonicBoundaryCollisions() {
 
             int plateB = cellPlateOwner[nIdx];
             if (plateB != plateA && plateB >= 0 && plateB < (int)plates.size()) {
-                Vector3 posB = GetCell3DVector(nIdx, N);
+                Vector3 posB = cell3DVectorMap[nIdx];
                 const auto& pB = plates[plateB];
                 Vector3 vB = Vector3CrossProduct(posA, Vector3Scale(pB.eulerPole, pB.angularSpeed));
 
