@@ -1,8 +1,8 @@
 #pragma once
+#include "utils.hpp"
 #include "fastnoise/FaseNoise.h"
 #include "raylib/raylib.h"
 #include <vector>
-#include <queue>
 
 // Hardcoded FastNoise constant parameters
 constexpr float NOISE_GAIN = 0.4f;       // Constant gain/persistence
@@ -16,22 +16,15 @@ constexpr float HARDCODED_STARFISH_AMP = 0.15f;      // Base amplitude depth for
 constexpr float HARDCODED_STARFISH_DAMPENING = 2.24f;// Dampens spike amplitude on small starfish seeds
 constexpr float HARDCODED_DIAMOND_PINCH = 1.19f;     // Diamond pinch / corner roundness q
 
-enum class PlateType {
-    OCEANIC = 0,
-    CONTINENTAL = 1
+enum class SDFBiasMode {
+    MapGradient = 0,
+    LowFreqNoise = 1
 };
 
 enum class FalloffType {
     Radial = 0,
     Diamond = 1,
-    Starfish = 2,
-    RandomPerSeed = 3
-};
-
-enum class FalloffMode {
-    SingleCenter = 0,
-    MultiSeedNearest = 1,
-    MultiSeedMetaball = 2
+    Starfish = 2
 };
 
 struct SeedPoint {
@@ -45,16 +38,6 @@ struct SeedPoint {
     float diamondAspect;
 };
 
-struct PQElement {
-    float dist;
-    int cellId;
-    int plateId;
-
-    bool operator>(const PQElement& other) const {
-        return dist > other.dist;
-    }
-};
-
 struct LandmassConfig {
     int mapWidth = 256;
     int mapHeight = 256;
@@ -65,6 +48,11 @@ struct LandmassConfig {
     float plateSizeVariance = 0.60f; // Random growth step bias variance per plate
     float landRatio = 0.45f;         // Ratio of Continental vs Oceanic plates (0.0 to 1.0)
     float maxSDFDepth = 30.1f;       // Max SDF distance for green gradient normalization
+    SDFBiasMode sdfBiasMode = SDFBiasMode::MapGradient; // SDF Bias Mode
+    float plateTaperStrengthV = 0.50f;// Vertical map tapering (North-to-South)
+    float plateTaperStrengthH = 0.00f;// Horizontal map tapering (West-to-East)
+    float lowFreqNoiseStrength = 0.60f;// Low-frequency noise modulation strength
+    float lowFreqNoiseFrequency = 1.20f;// Low-frequency noise frequency scale
 
     // Step 4: Landmass Seed Placement Settings
     float minInteriorSDF = 9.0f;     // Min SDF depth to place landmass seed
@@ -82,9 +70,7 @@ struct LandmassConfig {
     float waterLevel = 0.050f;
     float coastLineWidth = 0.015f;
 
-    // Multi-Seed Falloff Mask Settings
-    FalloffMode falloffMode = FalloffMode::MultiSeedMetaball;
-    FalloffType falloffType = FalloffType::RandomPerSeed;
+    // Multi-Seed Falloff Mask Settings (MultiSeedMetaball & RandomPerSeed)
     int seedCount = 12;
     float seedSpread = 0.84f;
     float seedMinRadius = 0.28f;
@@ -102,13 +88,9 @@ public:
     LandmassConfig config;
     std::vector<float> heightmap;
 
-    // Step 1: 2D Grid Cell random colors lookup
-    std::vector<Color> cellColors; 
-
     // Step 2: 2D Tectonic Plate Lookup & Priority Queue Dijkstra Expansion
     std::vector<int> cellPlateOwner;   // 1D lookup array mapping cellId -> plateId
     std::vector<float> cellPlateDist;  // Distance array mapping cellId -> min step distance
-    std::vector<Color> plateColors;    // Distinct random color for each plate
     std::vector<PlateType> plateTypes; // PlateType (OCEANIC vs CONTINENTAL) per plateId
     std::vector<float> plateGrowthBias;// Random step growth bias per plate
     std::vector<int> plateSeedCells;   // Array of seed cell indices
@@ -129,22 +111,20 @@ public:
     LandmassGenerator();
     ~LandmassGenerator();
 
-    // Step 1: 2D Grid Cell Random Color Generation
-    void GenerateGridCellColors();
-    Image GenerateGridCellImage();
-
     // Step 2: 2D Plate Assignment via Priority Queue (Dijkstra weighted growth)
     void RunPlateAssignmentFloodFill();
     Image GeneratePlateMapImage();
 
     // Step 3: Calculate Continental Interior SDF & Detect Inter-Plate Boundaries
-    void CalculateContinentalPlateSDF();
-    void DetectAllPlateBoundaries();
+    void CalculateBorders();
     Image GeneratePlateSDFMapImage();
 
     // Step 4: Generate Adaptive Landmass Seeds & Integrated Continental Heightmap
     void GenerateContinentalLandmassSeeds();
     void GenerateContinentalHeightmapData();
+
+    // Unified Pipeline Execution
+    void RunFullPipeline();
 
     // Falloff & Image Outputs
     void GenerateLandmassData();
@@ -154,4 +134,5 @@ public:
     Image GenerateCoastlineImage();
     Image GenerateHeightmapImage();
     Image GenerateRawNoiseImage();
+    Image GenerateGradientMapImage();
 };

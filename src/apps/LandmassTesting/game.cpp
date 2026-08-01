@@ -1,25 +1,17 @@
 #include "LandmassTesting.hpp"
+#include "helper.hpp"
 #include "ConsoleLog.hpp"
 #include "imgui/imgui.h"
-#include "raylib/raymath.h"
-#include "rlimgui/rlImGui.h"
-#include <algorithm>
 
 LandmassTesting::LandmassTesting()
     : Application(1280, 720, "2D Tectonic Plate & Continental Landmass Engine") {
     show3DViewportTab = false; // Pure 2D texture viewport mode
 }
 
-LandmassTesting::~LandmassTesting() {
-}
+LandmassTesting::~LandmassTesting() = default;
 
 Texture2D LandmassTesting::ReloadCoastlineCallback() {
-    generator.RunPlateAssignmentFloodFill();
-    generator.CalculateContinentalPlateSDF();
-    generator.DetectAllPlateBoundaries();
-    generator.GenerateContinentalLandmassSeeds();
-    generator.GenerateContinentalHeightmapData();
-
+    generator.RunFullPipeline();
     Image img = generator.GeneratePlateSDFMapImage();
     Texture2D tex = LoadTextureFromImage(img);
     UnloadImage(img);
@@ -40,30 +32,25 @@ Texture2D LandmassTesting::ReloadRawNoiseCallback() {
     return tex;
 }
 
+Texture2D LandmassTesting::ReloadGradientCallback() {
+    Image img = generator.GenerateGradientMapImage();
+    Texture2D tex = LoadTextureFromImage(img);
+    UnloadImage(img);
+    return tex;
+}
+
 void LandmassTesting::TriggerViewportReloads() {
     ReloadTextureViewport(coastlineViewportId);
     ReloadTextureViewport(heightmapViewportId);
     ReloadTextureViewport(rawNoiseViewportId);
+    ReloadTextureViewport(gradientViewportId);
 }
 
 void LandmassTesting::Init() {
-    generator.RunPlateAssignmentFloodFill();
-    generator.CalculateContinentalPlateSDF();
-    generator.DetectAllPlateBoundaries();
-    generator.GenerateContinentalLandmassSeeds();
-    generator.GenerateContinentalHeightmapData();
-
-    Image sdfImg = generator.GeneratePlateSDFMapImage();
-    coastlineTexture = LoadTextureFromImage(sdfImg);
-    UnloadImage(sdfImg);
-
-    Image coastImg = generator.GenerateCoastlineImage();
-    heightmapTexture = LoadTextureFromImage(coastImg);
-    UnloadImage(coastImg);
-
-    Image rawNoiseImg = generator.GenerateRawNoiseImage();
-    rawNoiseTexture = LoadTextureFromImage(rawNoiseImg);
-    UnloadImage(rawNoiseImg);
+    coastlineTexture = ReloadCoastlineCallback();
+    heightmapTexture = ReloadHeightmapCallback();
+    rawNoiseTexture = ReloadRawNoiseCallback();
+    gradientTexture = ReloadGradientCallback();
 
     coastlineViewportId = AddTextureViewport(coastlineTexture, "Continental SDF & Landmass Seeds (2D)", [this]() {
         return ReloadCoastlineCallback();
@@ -77,18 +64,20 @@ void LandmassTesting::Init() {
         return ReloadRawNoiseCallback();
     }, true);
 
+    gradientViewportId = AddTextureViewport(gradientTexture, "Map Tapering Gradient (2D)", [this]() {
+        return ReloadGradientCallback();
+    }, true);
+
     ConsoleLog::Get().AddLog(LogLevel::Info, "Continental Landmass Engine initialized.");
-    ConsoleLog::Get().AddLog(LogLevel::Info, "Registered Continental SDF Seeds, Coastline, and FastNoise Raylib Viewports.");
+    ConsoleLog::Get().AddLog(LogLevel::Info, "Registered Continental SDF Seeds, Coastline, FastNoise, and Map Gradient Viewports.");
 }
 
 void LandmassTesting::Update(float deltaTime) {
     if (!ImGui::GetIO().WantCaptureKeyboard) {
-        if (IsKeyPressed(KEY_LEFT)) {
-            if (generator.config.seed > 1) {
-                generator.config.seed--;
-                TriggerViewportReloads();
-                ConsoleLog::Get().AddLog(LogLevel::Info, "Seed decremented to %d via [Left Arrow] key.", generator.config.seed);
-            }
+        if (IsKeyPressed(KEY_LEFT) && generator.config.seed > 1) {
+            generator.config.seed--;
+            TriggerViewportReloads();
+            ConsoleLog::Get().AddLog(LogLevel::Info, "Seed decremented to %d via [Left Arrow] key.", generator.config.seed);
         }
         if (IsKeyPressed(KEY_RIGHT)) {
             generator.config.seed++;
@@ -109,32 +98,15 @@ void LandmassTesting::DrawUI() {
     if (ImGui::CollapsingHeader("Grid Resolution & Seed", ImGuiTreeNodeFlags_DefaultOpen)) {
         if (ImGui::SliderInt("Grid Seed", &config.seed, 1, 9999)) changed = true;
 
-        int currentRes = config.mapWidth;
         const char* resItems[] = { "32x32", "64x64", "128x128", "256x256", "512x512", "1024x1024" };
-        int selectedRes = 3;
-        if (currentRes == 32) selectedRes = 0;
-        else if (currentRes == 64) selectedRes = 1;
-        else if (currentRes == 128) selectedRes = 2;
-        else if (currentRes == 256) selectedRes = 3;
-        else if (currentRes == 512) selectedRes = 4;
-        else if (currentRes == 1024) selectedRes = 5;
-
+        int selectedRes = GetResIndex(config.mapWidth);
         if (ImGui::Combo("Grid Resolution", &selectedRes, resItems, IM_ARRAYSIZE(resItems))) {
-            int newRes = 256;
-            if (selectedRes == 0) newRes = 32;
-            else if (selectedRes == 1) newRes = 64;
-            else if (selectedRes == 2) newRes = 128;
-            else if (selectedRes == 3) newRes = 256;
-            else if (selectedRes == 4) newRes = 512;
-            else if (selectedRes == 5) newRes = 1024;
-
+            int newRes = GetResFromIndex(selectedRes);
             if (newRes != config.mapWidth) {
-                config.mapWidth = newRes;
-                config.mapHeight = newRes;
+                config.mapWidth = config.mapHeight = newRes;
                 changed = true;
             }
         }
-
         ImGui::Text("Total Cells: %d x %d = %d", config.mapWidth, config.mapHeight, config.mapWidth * config.mapHeight);
     }
 
@@ -147,6 +119,21 @@ void LandmassTesting::DrawUI() {
 
     // 3. Adaptive Continental Landmass Seed Spreading
     if (ImGui::CollapsingHeader("Adaptive Landmass Seed Spreading", ImGuiTreeNodeFlags_DefaultOpen)) {
+        const char* biasModeItems[] = { "2D Map Gradient", "Low-Frequency Noise" };
+        int currentBiasMode = (int)config.sdfBiasMode;
+        if (ImGui::Combo("SDF Bias Mode", &currentBiasMode, biasModeItems, IM_ARRAYSIZE(biasModeItems))) {
+            config.sdfBiasMode = (SDFBiasMode)currentBiasMode;
+            changed = true;
+        }
+
+        if (config.sdfBiasMode == SDFBiasMode::MapGradient) {
+            if (ImGui::SliderFloat("Vertical Tapering (North-to-South)", &config.plateTaperStrengthV, 0.0f, 1.0f, "%.2f")) changed = true;
+            if (ImGui::SliderFloat("Horizontal Tapering (West-to-East)", &config.plateTaperStrengthH, 0.0f, 1.0f, "%.2f")) changed = true;
+        } else if (config.sdfBiasMode == SDFBiasMode::LowFreqNoise) {
+            if (ImGui::SliderFloat("Low-Freq Noise Strength", &config.lowFreqNoiseStrength, 0.0f, 1.5f, "%.2f")) changed = true;
+            if (ImGui::SliderFloat("Low-Freq Noise Scale", &config.lowFreqNoiseFrequency, 0.1f, 5.0f, "%.2f")) changed = true;
+        }
+
         if (ImGui::SliderFloat("Center Concentration (Power)", &config.concentrationPower, 0.1f, 5.0f, "%.2f")) changed = true;
         if (ImGui::SliderFloat("Min Interior Seed SDF", &config.minInteriorSDF, 1.0f, 20.0f, "%.1f cells")) changed = true;
         if (ImGui::SliderFloat("Landmass Seed Spacing", &config.seedSpacing, 5.0f, 50.0f, "%.1f cells")) changed = true;
@@ -156,42 +143,17 @@ void LandmassTesting::DrawUI() {
 
     // 4. Landmass Form & Multi-Seed Falloff Mask Controls
     if (ImGui::CollapsingHeader("Landmass Form & Multi-Seed Spacing", ImGuiTreeNodeFlags_DefaultOpen)) {
-        const char* modeItems[] = { "Single Center (Classic)", "Multi-Seed Nearest (Voronoi)", "Multi-Seed Metaball (Organic)" };
-        int currentMode = (int)config.falloffMode;
-        if (ImGui::Combo("Falloff Mode", &currentMode, modeItems, IM_ARRAYSIZE(modeItems))) {
-            config.falloffMode = (FalloffMode)currentMode;
-            changed = true;
-        }
-
-        const char* falloffItems[] = {
-            "Radial (Euclidean)",
-            "Diamond (Superellipse)",
-            "Starfish (Angular Wave)",
-            "Random per Seed Center"
-        };
-        int currentFalloff = (int)config.falloffType;
-        if (ImGui::Combo("Falloff Shape", &currentFalloff, falloffItems, IM_ARRAYSIZE(falloffItems))) {
-            config.falloffType = (FalloffType)currentFalloff;
-            changed = true;
-        }
-
         if (ImGui::SliderFloat("Falloff Curve Exponent", &config.falloffPower, 0.5f, 4.0f, "%.2f")) changed = true;
     }
+
+
 
     // 5. FastNoise Lite Generator Controls
     if (ImGui::CollapsingHeader("FastNoise Controls", ImGuiTreeNodeFlags_DefaultOpen)) {
         const char* fractalItems[] = { "None", "FBm", "Ridged", "PingPong" };
-        int currentFractal = 2;
-        if (config.fractalType == FastNoiseLite::FractalType_None) currentFractal = 0;
-        else if (config.fractalType == FastNoiseLite::FractalType_FBm) currentFractal = 1;
-        else if (config.fractalType == FastNoiseLite::FractalType_Ridged) currentFractal = 2;
-        else if (config.fractalType == FastNoiseLite::FractalType_PingPong) currentFractal = 3;
-
+        int currentFractal = (int)config.fractalType;
         if (ImGui::Combo("Fractal Type", &currentFractal, fractalItems, IM_ARRAYSIZE(fractalItems))) {
-            if (currentFractal == 0) config.fractalType = FastNoiseLite::FractalType_None;
-            else if (currentFractal == 1) config.fractalType = FastNoiseLite::FractalType_FBm;
-            else if (currentFractal == 2) config.fractalType = FastNoiseLite::FractalType_Ridged;
-            else if (currentFractal == 3) config.fractalType = FastNoiseLite::FractalType_PingPong;
+            config.fractalType = (FastNoiseLite::FractalType)currentFractal;
             changed = true;
         }
 

@@ -10,10 +10,12 @@ private:
     Texture2D coastlineTexture = { 0 };
     Texture2D heightmapTexture = { 0 };
     Texture2D rawNoiseTexture = { 0 };
+    Texture2D gradientTexture = { 0 };
 
     int coastlineViewportId = -1;
     int heightmapViewportId = -1;
     int rawNoiseViewportId = -1;
+    int gradientViewportId = -1;
 
     bool autoReloadOnSliderChange = true;
 
@@ -31,5 +33,6 @@ private:
     Texture2D ReloadCoastlineCallback();
     Texture2D ReloadHeightmapCallback();
     Texture2D ReloadRawNoiseCallback();
+    Texture2D ReloadGradientCallback();
     void TriggerViewportReloads();
 };
