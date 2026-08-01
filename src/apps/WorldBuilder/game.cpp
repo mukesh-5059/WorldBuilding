@@ -279,6 +279,18 @@ void WorldBuilder::DrawUI() {
         }
     }
 
+    if (ImGui::CollapsingHeader("Boundary Island Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+        bool islandChanged = false;
+
+        if (ImGui::Checkbox("Enable Islands", &plotter.enableIslands)) islandChanged = true;
+        if (ImGui::SliderFloat("Island Density", &plotter.islandDensity, 0.1f, 2.0f, "%.2f")) islandChanged = true;
+        if (ImGui::SliderFloat("Island Size Scale", &plotter.islandSizeScale, 0.5f, 3.0f, "%.2f")) islandChanged = true;
+
+        if (islandChanged) {
+            RebuildPlotter();
+        }
+    }
+
     if (ImGui::CollapsingHeader("Icosphere Settings")) {
         ImGui::SliderInt("Subdivisions", &subdivisions, 0, 8);
         if (ImGui::SliderFloat("Radius", &radius, 0.5f, 15.0f, "%.2f")) {

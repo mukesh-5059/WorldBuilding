@@ -60,6 +60,11 @@ public:
     std::vector<Vector3> cell3DVectorMap;
     int cachedCellVectorFaceRes = 0;
 
+    // Island Generation Controls
+    bool enableIslands = true;
+    float islandDensity = 0.50f;
+    float islandSizeScale = 1.0f;
+
     Image textureImage;
     Texture2D texture;
 
@@ -69,6 +74,7 @@ public:
     void Rebuild(int faceRes, float radius, int tWidth = 2048, int tHeight = 1024);
     void RunTectonicPlateAssignment();
     void EvaluateTectonicBoundaryCollisions();
+    void GenerateBoundaryIslands();
     void RenderPointsToEquirectangularTexture();
     bool ExportTextureImage(const char* filepath);
     void Unload();

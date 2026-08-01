@@ -65,6 +65,7 @@ void Builder::Rebuild(int faceRes, float radius, int tWidth, int tHeight) {
 
     RunTectonicPlateAssignment();
     EvaluateTectonicBoundaryCollisions();
+    GenerateBoundaryIslands();
 
     textureImage = GenImageColor(texWidth, texHeight, WHITE);
     RenderPointsToEquirectangularTexture();
