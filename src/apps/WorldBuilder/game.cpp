@@ -15,6 +15,10 @@ void WorldBuilder::RebuildPlotter() {
     if (modelGenerated && plotter.textureLoaded) {
         icosphereModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = plotter.texture;
     }
+
+    if (worldMapViewportId != -1) {
+        ReloadTextureViewport(worldMapViewportId);
+    }
 }
 
 void WorldBuilder::Init() {
@@ -34,6 +38,15 @@ void WorldBuilder::Init() {
     modelGenerated = true;
 
     RebuildPlotter();
+
+    // Create a constant texture viewport tab to display the Raylib texture from WorldBuilder
+    worldMapViewportId = AddTextureViewport(
+        plotter.texture,
+        "World Map Texture",
+        [this]() { return plotter.texture; },
+        false, // ownsTexture = false (WorldBuilder/Builder owns the texture)
+        false  // canClose = false (constant tab)
+    );
 }
 
 void WorldBuilder::Update(float deltaTime) {
@@ -197,7 +210,8 @@ void WorldBuilder::DrawUI() {
             RebuildPlotter();
         }
 
-        if (ImGui::SliderFloat("Land Threshold", &plotter.landThreshold, 0.0f, 1.0f, "%.2f")) {
+        if (ImGui::SliderFloat("Sea Level", &plotter.seaLevel, 0.0f, 1.0f, "%.2f")) {
+            plotter.landThreshold = plotter.seaLevel;
             RebuildPlotter();
         }
 
@@ -211,10 +225,16 @@ void WorldBuilder::DrawUI() {
 
         if (ImGui::Checkbox("Draw Plate Boundaries", &plotter.drawBoundaries)) {
             plotter.RenderPointsToEquirectangularTexture();
+            if (worldMapViewportId != -1) {
+                ReloadTextureViewport(worldMapViewportId);
+            }
         }
 
         if (ImGui::Checkbox("Draw Stress Boundaries (Red/Cyan/Orange)", &plotter.drawStressBoundaries)) {
             plotter.RenderPointsToEquirectangularTexture();
+            if (worldMapViewportId != -1) {
+                ReloadTextureViewport(worldMapViewportId);
+            }
         }
 
         if (ImGui::Button("Regenerate Tectonic Plates", ImVec2(-1, 0))) {
@@ -227,12 +247,32 @@ void WorldBuilder::DrawUI() {
                 TraceLog(LOG_INFO, "Successfully exported generated/polar_point_texture.png");
             }
         }
+    }
 
-        if (ImGui::Button("Export & Open in New Tab", ImVec2(-1, 0))) {
-            MakeDirectory("generated");
-            if (plotter.ExportTextureImage("generated/polar_point_texture.png")) {
-                AddTextureViewport("generated/polar_point_texture.png");
-            }
+    if (ImGui::CollapsingHeader("Noise & Terrain Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+        bool noiseChanged = false;
+
+        if (ImGui::SliderFloat("Sea Level", &plotter.seaLevel, 0.0f, 1.0f, "%.2f")) {
+            plotter.landThreshold = plotter.seaLevel;
+            noiseChanged = true;
+        }
+
+        if (ImGui::DragInt("Noise Seed", &plotter.noiseSeed, 1.0f, 0, 999999)) noiseChanged = true;
+
+        const char* noiseTypeNames[] = { "OpenSimplex2", "OpenSimplex2S", "Cellular", "Perlin", "ValueCubic", "Value" };
+        if (ImGui::Combo("Noise Type", &plotter.noiseType, noiseTypeNames, IM_ARRAYSIZE(noiseTypeNames))) noiseChanged = true;
+
+        const char* fractalTypeNames[] = { "None", "FBm", "Ridged", "PingPong" };
+        if (ImGui::Combo("Fractal Type", &plotter.noiseFractalType, fractalTypeNames, IM_ARRAYSIZE(fractalTypeNames))) noiseChanged = true;
+
+        if (ImGui::SliderFloat("Frequency", &plotter.noiseFrequency, 0.1f, 10.0f, "%.2f")) noiseChanged = true;
+        if (ImGui::SliderInt("Octaves", &plotter.noiseOctaves, 1, 8)) noiseChanged = true;
+        if (ImGui::SliderFloat("Lacunarity", &plotter.noiseLacunarity, 1.0f, 4.0f, "%.2f")) noiseChanged = true;
+        if (ImGui::SliderFloat("Gain (Persistence)", &plotter.noiseGain, 0.0f, 1.0f, "%.2f")) noiseChanged = true;
+        if (ImGui::SliderFloat("Noise Strength", &plotter.noiseStrength, 0.0f, 2.0f, "%.2f")) noiseChanged = true;
+
+        if (noiseChanged) {
+            RebuildPlotter();
         }
     }
 

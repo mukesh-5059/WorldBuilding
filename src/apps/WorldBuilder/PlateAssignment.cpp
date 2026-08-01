@@ -135,10 +135,13 @@ void Builder::RunTectonicPlateAssignment() {
 
     // FastNoise 3D Continental Landmass Generation
     FastNoiseLite noise;
-    noise.SetNoiseType(FastNoiseLite::NoiseType_OpenSimplex2);
-    noise.SetFractalType(FastNoiseLite::FractalType_FBm);
-    noise.SetFractalOctaves(4);
-    noise.SetFrequency(2.5f);
+    noise.SetSeed(noiseSeed);
+    noise.SetNoiseType((FastNoiseLite::NoiseType)noiseType);
+    noise.SetFractalType((FastNoiseLite::FractalType)noiseFractalType);
+    noise.SetFractalOctaves(noiseOctaves);
+    noise.SetFrequency(noiseFrequency);
+    noise.SetFractalLacunarity(noiseLacunarity);
+    noise.SetFractalGain(noiseGain);
 
     cellIsLand.assign(totalCells, false);
 
@@ -147,15 +150,15 @@ void Builder::RunTectonicPlateAssignment() {
         if (p >= 0 && p < numPlates) {
             if (plates[p].type == PlateType::CONTINENTAL) {
                 Vector3 pos = GetCell3DVector(c, N);
-                // Sample 3D OpenSimplex2 noise
-                float noiseVal = noise.GetNoise(pos.x * 2.5f, pos.y * 2.5f, pos.z * 2.5f); // [-1.0, 1.0]
+                // Sample 3D noise
+                float noiseVal = noise.GetNoise(pos.x, pos.y, pos.z); // [-1.0, 1.0]
 
                 // Distance from plate seed normalized
                 float normDist = (maxPlateDist[p] > 0.001f) ? (dist[c] / maxPlateDist[p]) : 1.0f;
 
                 // Combine distance falloff with 3D noise for organic continent shape
-                float landValue = (1.0f - normDist) * 1.4f + (noiseVal * 0.5f);
-                cellIsLand[c] = (landValue > landThreshold);
+                float landValue = (1.0f - normDist) * 1.4f + (noiseVal * noiseStrength);
+                cellIsLand[c] = (landValue > seaLevel);
             } else {
                 cellIsLand[c] = false;
             }

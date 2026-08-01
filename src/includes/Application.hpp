@@ -12,6 +12,7 @@ struct TextureViewport {
     Texture2D texture = { 0 };
     bool isLoaded = false;
     bool open = true;
+    bool canClose = true;
     bool ownsTexture = true;
     std::function<Texture2D()> reloadCallback = nullptr;
 };
@@ -42,7 +43,7 @@ protected:
     void editorGui();
 
     int AddTextureViewport(const std::string& initialPath = "");
-    int AddTextureViewport(Texture2D texture, const std::string& name = "", std::function<Texture2D()> reloadCallback = nullptr, bool ownsTexture = false);
+    int AddTextureViewport(Texture2D texture, const std::string& name = "", std::function<Texture2D()> reloadCallback = nullptr, bool ownsTexture = false, bool canClose = true);
     void RemoveTextureViewport(int index);
     void SetTextureViewportCallback(int viewportId, std::function<Texture2D()> reloadCallback);
     void SetTextureViewportTexture(int viewportId, Texture2D texture, bool ownsTexture = false);

@@ -20,6 +20,7 @@ private:
 
     Builder plotter;
     int uiLonResIndex;
+    int worldMapViewportId = -1;
 
 public:
     WorldBuilder();

@@ -24,13 +24,14 @@ int Application::AddTextureViewport(const std::string& initialPath) {
     return vp.id;
 }
 
-int Application::AddTextureViewport(Texture2D texture, const std::string& name, std::function<Texture2D()> reloadCallback, bool ownsTexture) {
+int Application::AddTextureViewport(Texture2D texture, const std::string& name, std::function<Texture2D()> reloadCallback, bool ownsTexture, bool canClose) {
     TextureViewport vp;
     vp.id = nextViewportId++;
     vp.name = name.empty() ? ("Texture " + std::to_string(vp.id)) : name;
     vp.texture = texture;
     vp.isLoaded = (texture.id > 0);
     vp.ownsTexture = ownsTexture;
+    vp.canClose = canClose;
     vp.reloadCallback = reloadCallback;
     if (vp.isLoaded) {
         SetTextureFilter(vp.texture, TEXTURE_FILTER_BILINEAR);
@@ -220,7 +221,7 @@ void Application::editorGui() {
                 for (size_t i = 0; i < textureViewports.size(); ++i) {
                     auto& vp = textureViewports[i];
                     std::string tabLabel = vp.name + "###vp_" + std::to_string(vp.id);
-                    if (ImGui::BeginTabItem(tabLabel.c_str(), &vp.open)) {
+                    if (ImGui::BeginTabItem(tabLabel.c_str(), vp.canClose ? &vp.open : nullptr)) {
                         ImGui::Spacing();
                         ImGui::AlignTextToFramePadding();
                         if (vp.reloadCallback != nullptr) {
